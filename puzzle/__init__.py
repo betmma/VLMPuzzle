@@ -11,6 +11,11 @@ __all__ = [
     "SudokuEvaluator",
     "SudokuPuzzleRecord",
     "SudokuEvaluationResult",
+    "MirrorGenerator",
+    "MirrorEvaluator",
+    "MirrorPuzzleRecord",
+    "MirrorEvaluationResult",
+    "MirrorCellEvaluation",
     "PieceEvaluation",
     "CellEvaluation",
 ]
@@ -29,4 +34,12 @@ from .sudoku import (
     SudokuPuzzleRecord,
     SudokuEvaluationResult,
     CellEvaluation,
+)
+
+from .mirror import (
+    MirrorGenerator,
+    MirrorEvaluator,
+    MirrorPuzzleRecord,
+    MirrorEvaluationResult,
+    MirrorCellEvaluation,
 )

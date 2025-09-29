@@ -93,6 +93,26 @@ python -m puzzle.sudoku.evaluator data/sudoku/puzzles.json <PUZZLE_ID> candidate
 
 The evaluator trims borders, rescales the candidate to the reference solution, reads the digit in each cell, and reports accuracy plus invalid positions.
 
+## Generating mirror puzzles
+
+```
+python -m puzzle.mirror.generator 10 --output-dir data/mirror --rows 6 --cols 8 --cell-size 48 --fill 0.6 --seed 7 --monochrome
+```
+
+Outputs:
+- data/mirror/puzzles/<id>_puzzle.png: left half colored, right half blank.
+- add `--monochrome` to keep a single hue across all filled cells.
+- data/mirror/solutions/<id>_solution.png: full mirrored grid reference.
+- data/mirror/puzzles.json: metadata with per-cell colors and layout details.
+
+## Evaluating mirror outputs
+
+```
+python -m puzzle.mirror.evaluator data/mirror/puzzles.json <PUZZLE_ID> candidate.png --color-tolerance 20
+```
+
+Each right-half cell is compared against its mirrored counterpart by averaging RGB values and measuring color distance.
+
 ## Notes
 
 - Sudoku OCR relies on Tesseract via `pytesseract`; install the Tesseract binary and ensure it is available on PATH.
