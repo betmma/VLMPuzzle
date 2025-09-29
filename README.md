@@ -18,7 +18,7 @@ pip install -r requirements.txt
 Run the generator CLI to download random images from https://picsum.photos, slice them into a grid, scatter the tiles, and store metadata and images on disk.
 
 ```
-python -m puzzle.generator 5 --rows 3 --cols 3 --size 512 512 --output-dir data --metadata data/puzzles.json --prompt "Solve the jigsaw puzzle" --seed 42
+python -m puzzle.jigsaw.generator 5 --rows 3 --cols 3 --size 512 512 --output-dir data --metadata data/puzzles.json --prompt "Solve the jigsaw puzzle" --seed 42
 ```
 
 Key outputs per puzzle:
@@ -30,9 +30,9 @@ Key outputs per puzzle:
 You can also build a puzzle from a local image:
 
 ```
-from puzzle.generator import PuzzleGenerator
+from puzzle.jigsaw import JigsawGenerator
 
-gen = PuzzleGenerator(output_dir="data", rows=4, cols=4)
+gen = JigsawGenerator(output_dir="data", rows=4, cols=4)
 record = gen.create_puzzle_from_path("my_image.jpg")
 ```
 
@@ -41,7 +41,7 @@ record = gen.create_puzzle_from_path("my_image.jpg")
 Given a stored puzzle id and a candidate solution image (for example the final frame from a model), run the evaluator. It trims borders, resizes to the reference dimensions, compares per-tile similarity, and reports accuracy.
 
 ```
-python -m puzzle.evaluator data/puzzles.json <PUZZLE_ID> path/to/model_output.png --threshold 0.85 --trim-tolerance 10
+python -m puzzle.jigsaw.evaluator data/puzzles.json <PUZZLE_ID> path/to/model_output.png --threshold 0.92 --trim-tolerance 10
 ```
 
 Example JSON result:

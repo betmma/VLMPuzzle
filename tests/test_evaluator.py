@@ -5,18 +5,18 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from puzzle.generator import PuzzleGenerator
-from puzzle.evaluator import PuzzleEvaluator
+from puzzle.jigsaw import JigsawGenerator
+from puzzle.jigsaw import JigsawEvaluator
 
 
-class PuzzleEvaluatorTests(unittest.TestCase):
+class JigsawEvaluatorTests(unittest.TestCase):
     """Regression tests ensuring the evaluator scores puzzles correctly."""
 
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         base_path = Path(self._tmpdir.name)
         self.output_dir = base_path / "dataset"
-        self.generator = PuzzleGenerator(
+        self.generator = JigsawGenerator(
             output_dir=self.output_dir,
             rows=2,
             cols=2,
@@ -34,7 +34,7 @@ class PuzzleEvaluatorTests(unittest.TestCase):
         self.metadata_path = self.output_dir / "puzzles.json"
         self.metadata_path.write_text(json.dumps([self.record.to_dict()]), encoding="utf-8")
         self.original_image_path = self.output_dir / self.record.original_image_path
-        self.evaluator = PuzzleEvaluator(self.metadata_path)
+        self.evaluator = JigsawEvaluator(self.metadata_path)
 
     def tearDown(self) -> None:
         self._tmpdir.cleanup()

@@ -1,4 +1,4 @@
-"""Evaluate model-generated jigsaw puzzle solutions."""
+"""Jigsaw puzzle evaluator implementation."""
 
 from __future__ import annotations
 
@@ -11,15 +11,16 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 from PIL import Image
 
+from ..base import AbstractPuzzleEvaluator, PathLike
+
 try:  # Pillow 9/10 compatibility
     RESAMPLE_LANCZOS = Image.Resampling.LANCZOS
 except AttributeError:  # pragma: no cover - older Pillow
     RESAMPLE_LANCZOS = Image.LANCZOS
 
-PathLike = Union[str, Path]
 
 __all__ = [
-    "PuzzleEvaluator",
+    "JigsawEvaluator",
     "EvaluationResult",
     "PieceEvaluation",
 ]
@@ -61,46 +62,20 @@ class EvaluationResult:
         }
 
 
-class PuzzleEvaluator:
+class JigsawEvaluator(AbstractPuzzleEvaluator):
     """Evaluate candidate puzzle solutions against stored metadata."""
-
-    def __init__(
-        self,
-        metadata_path: PathLike,
-        *,
-        base_dir: Optional[PathLike] = None,
-    ) -> None:
-        self.metadata_path = Path(metadata_path)
-        if not self.metadata_path.exists():
-            raise FileNotFoundError(f"Metadata file not found: {self.metadata_path}")
-        self.base_dir = Path(base_dir) if base_dir is not None else self.metadata_path.parent
-        self._records = self._load_metadata()
-
-    def _load_metadata(self) -> Dict[str, Dict[str, object]]:
-        data = json.loads(self.metadata_path.read_text(encoding="utf-8"))
-        if not isinstance(data, list):
-            raise ValueError("Puzzle metadata must be a list of records")
-        records: Dict[str, Dict[str, object]] = {}
-        for record in data:
-            puzzle_id = record.get("id")
-            if not puzzle_id:
-                raise ValueError("Each puzzle record must include an 'id'")
-            records[str(puzzle_id)] = record
-        return records
 
     def evaluate(
         self,
         puzzle_id: str,
         candidate_image: PathLike,
         *,
-        similarity_threshold: float = 0.85,
+        similarity_threshold: float = 0.9,
         trim_tolerance: int = 8,
     ) -> EvaluationResult:
-        record = self._records.get(puzzle_id)
-        if record is None:
-            raise KeyError(f"Puzzle id '{puzzle_id}' not found in metadata")
+        record = self.get_record(puzzle_id)
 
-        original_image_path = self._resolve_path(record["original_image_path"])
+        original_image_path = self.resolve_path(record["original_image_path"])
         candidate_path = Path(candidate_image)
         if not original_image_path.exists():
             raise FileNotFoundError(f"Original image missing: {original_image_path}")
@@ -141,13 +116,6 @@ class PuzzleEvaluator:
             per_piece=per_piece_results,
         )
 
-    def _resolve_path(self, path_value: object) -> Path:
-        path_str = str(path_value)
-        candidate = Path(path_str)
-        if not candidate.is_absolute():
-            candidate = self.base_dir / candidate
-        return candidate
-
     @staticmethod
     def _trim_borders(image: Image.Image, *, tolerance: int = 8) -> Image.Image:
         arr = np.asarray(image)
@@ -186,7 +154,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--threshold",
         type=float,
-        default=0.85,
+        default=0.9,
         help="Similarity threshold for considering a tile correct",
     )
     parser.add_argument(
@@ -206,7 +174,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 def main(argv: Optional[List[str]] = None) -> None:
     args = _parse_args(argv)
-    evaluator = PuzzleEvaluator(args.metadata, base_dir=args.base_dir)
+    evaluator = JigsawEvaluator(args.metadata, base_dir=args.base_dir)
     result = evaluator.evaluate(
         args.puzzle_id,
         args.candidate,

@@ -1,30 +1,30 @@
-"""Utilities for creating jigsaw-style puzzles for video language models."""
+"""Jigsaw puzzle generator implementation."""
 
 from __future__ import annotations
 
 import argparse
-import json
 import random
 import uuid
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from PIL import Image
+
+from ..base import AbstractPuzzleGenerator, PathLike
 
 try:  # Pillow 9/10 compatibility
     RESAMPLE_LANCZOS = Image.Resampling.LANCZOS
 except AttributeError:  # pragma: no cover - older Pillow
     RESAMPLE_LANCZOS = Image.LANCZOS
 
-PathLike = Union[str, Path]
-
 
 @dataclass
 class PieceSpec:
     """Piece specification within the solved image."""
+
     id: str
     row: int
     col: int
@@ -46,6 +46,7 @@ class PieceSpec:
 @dataclass
 class ScatterPlacement:
     """Placement of a shuffled piece inside the input puzzle image."""
+
     piece_id: str
     position: Tuple[int, int]
     rotation: int
@@ -61,6 +62,7 @@ class ScatterPlacement:
 @dataclass
 class PuzzleRecord:
     """Metadata persisted for a single puzzle instance."""
+
     id: str
     prompt: str
     image_source: str
@@ -87,7 +89,7 @@ class PuzzleRecord:
         }
 
 
-class PuzzleGenerator:
+class JigsawGenerator(AbstractPuzzleGenerator[PuzzleRecord]):
     """Create shuffled jigsaw puzzles from random imagery."""
 
     def __init__(
@@ -104,7 +106,7 @@ class PuzzleGenerator:
         max_scatter_attempts: int = 200,
         seed: Optional[int] = None,
     ) -> None:
-        self.output_dir = Path(output_dir)
+        super().__init__(output_dir)
         self.rows = rows
         self.cols = cols
         self.image_size = image_size
@@ -117,29 +119,8 @@ class PuzzleGenerator:
 
         self.original_dir = self.output_dir / "original"
         self.input_dir = self.output_dir / "inputs"
-        for path in (self.output_dir, self.original_dir, self.input_dir):
+        for path in (self.original_dir, self.input_dir):
             path.mkdir(parents=True, exist_ok=True)
-
-    def generate_dataset(
-        self,
-        count: int,
-        *,
-        metadata_path: Optional[PathLike] = None,
-        append: bool = True,
-    ) -> List[PuzzleRecord]:
-        """Generate count puzzles and optionally persist metadata as JSON."""
-
-        records = [self._create_random_puzzle() for _ in range(count)]
-        if metadata_path is not None:
-            self._write_metadata(records, metadata_path, append=append)
-        return records
-
-    def _create_random_puzzle(self) -> PuzzleRecord:
-        width, height = self.image_size
-        random_token = self._rng.randint(0, 1_000_000_000)
-        image_url = f"https://picsum.photos/{width}/{height}?random={random_token}"
-        image = self._download_image(image_url)
-        return self.create_puzzle(image=image, image_source=image_url)
 
     def create_puzzle(
         self,
@@ -169,8 +150,8 @@ class PuzzleGenerator:
             id=puzzle_uuid,
             prompt=self.prompt,
             image_source=image_source,
-            original_image_path=self._relativize(original_path),
-            input_image_path=self._relativize(input_path),
+            original_image_path=self.relativize_path(original_path),
+            input_image_path=self.relativize_path(input_path),
             grid={"rows": self.rows, "cols": self.cols},
             piece_edges=piece_edges,
             pieces=[piece_spec for piece_spec, _ in pieces],
@@ -178,6 +159,13 @@ class PuzzleGenerator:
             image_size=solved_image.size,
         )
         return record
+
+    def create_random_puzzle(self) -> PuzzleRecord:
+        width, height = self.image_size
+        random_token = self._rng.randint(0, 1_000_000_000)
+        image_url = f"https://picsum.photos/{width}/{height}?random={random_token}"
+        image = self._download_image(image_url)
+        return self.create_puzzle(image=image, image_source=image_url)
 
     def create_puzzle_from_path(
         self,
@@ -200,7 +188,7 @@ class PuzzleGenerator:
 
     def _download_image(self, url: str, *, timeout: int = 20) -> Image.Image:
         try:
-            response = requests.get(url, timeout=timeout, verify = False, proxies={'http': '', 'https': ''})
+            response = requests.get(url, timeout=timeout)
             response.raise_for_status()
         except requests.RequestException as exc:  # pragma: no cover - network failure
             raise RuntimeError(f"Failed to download image from {url}") from exc
@@ -269,8 +257,11 @@ class PuzzleGenerator:
                     break
 
             if not placed:
-                # deterministic fallback keeps generator from failing outright
-                columns = max(1, (canvas_width - self.scatter_margin) // max(1, tile.width + self.scatter_margin))
+                columns = max(
+                    1,
+                    (canvas_width - self.scatter_margin)
+                    // max(1, tile.width + self.scatter_margin),
+                )
                 index = len(occupied)
                 row_idx, col_idx = divmod(index, columns)
                 x = min(
@@ -289,21 +280,6 @@ class PuzzleGenerator:
 
         return background.convert("RGB"), placements
 
-    def _write_metadata(
-        self,
-        records: Iterable[PuzzleRecord],
-        metadata_path: PathLike,
-        *,
-        append: bool,
-    ) -> None:
-        path = Path(metadata_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        existing: List[Dict[str, Any]] = []
-        if append and path.exists():
-            existing = json.loads(path.read_text(encoding="utf-8"))
-        combined = existing + [record.to_dict() for record in records]
-        path.write_text(json.dumps(combined, indent=2), encoding="utf-8")
-
     @staticmethod
     def _compute_axis_edges(size: int, segments: int) -> List[int]:
         return [round(i * size / segments) for i in range(segments + 1)]
@@ -312,15 +288,9 @@ class PuzzleGenerator:
     def _intersects(a: Tuple[int, int, int, int], b: Tuple[int, int, int, int]) -> bool:
         return not (a[2] <= b[0] or a[0] >= b[2] or a[3] <= b[1] or a[1] >= b[3])
 
-    def _relativize(self, path: Path) -> str:
-        try:
-            return path.relative_to(self.output_dir).as_posix()
-        except ValueError:
-            return path.as_posix()
-
 
 __all__ = [
-    "PuzzleGenerator",
+    "JigsawGenerator",
     "PuzzleRecord",
     "PieceSpec",
     "ScatterPlacement",
@@ -387,7 +357,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[List[str]] = None) -> None:
     args = _parse_args(argv)
     metadata_path = args.metadata or (args.output_dir / "puzzles.json")
-    generator = PuzzleGenerator(
+    generator = JigsawGenerator(
         output_dir=args.output_dir,
         rows=args.rows,
         cols=args.cols,

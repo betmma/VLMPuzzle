@@ -1,10 +1,13 @@
-"""Puzzle generation and evaluation tools for video LM jigsaw tasks."""
+"""Puzzle generation and evaluation toolkit."""
 
 __all__ = [
-    "PuzzleGenerator",
-    "PuzzleEvaluator",
+    "AbstractPuzzleGenerator",
+    "AbstractPuzzleEvaluator",
+    "JigsawGenerator",
+    "JigsawEvaluator",
     "EvaluationResult",
+    "PieceEvaluation",
 ]
 
-from .generator import PuzzleGenerator
-from .evaluator import PuzzleEvaluator, EvaluationResult
+from .base import AbstractPuzzleGenerator, AbstractPuzzleEvaluator
+from .jigsaw import JigsawGenerator, JigsawEvaluator, EvaluationResult, PieceEvaluation
