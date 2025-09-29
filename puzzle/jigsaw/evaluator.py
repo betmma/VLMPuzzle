@@ -21,7 +21,7 @@ except AttributeError:  # pragma: no cover - older Pillow
 
 __all__ = [
     "JigsawEvaluator",
-    "EvaluationResult",
+    "JigsawEvaluationResult",
     "PieceEvaluation",
 ]
 
@@ -43,7 +43,7 @@ class PieceEvaluation:
 
 
 @dataclass
-class EvaluationResult:
+class JigsawEvaluationResult:
     """Aggregated evaluation score for an entire puzzle."""
 
     puzzle_id: str
@@ -72,7 +72,7 @@ class JigsawEvaluator(AbstractPuzzleEvaluator):
         *,
         similarity_threshold: float = 0.9,
         trim_tolerance: int = 8,
-    ) -> EvaluationResult:
+    ) -> JigsawEvaluationResult:
         record = self.get_record(puzzle_id)
 
         original_image_path = self.resolve_path(record["original_image_path"])
@@ -108,7 +108,7 @@ class JigsawEvaluator(AbstractPuzzleEvaluator):
         total = len(per_piece_results)
         accuracy = correct / total if total else 0.0
 
-        return EvaluationResult(
+        return JigsawEvaluationResult(
             puzzle_id=puzzle_id,
             correct_pieces=correct,
             total_pieces=total,

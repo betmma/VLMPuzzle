@@ -1,6 +1,6 @@
-# Video LM Jigsaw Puzzle Toolkit
+# Video LM Puzzle Toolkit
 
-Utilities for generating shuffled jigsaw puzzles (input images plus metadata) and evaluating model reconstructions for video-language model training.
+Utilities for generating shuffled jigsaw puzzles (input images plus metadata) and compact 4x4 Sudoku board challenges, along with evaluators for verifying model reconstructions.
 
 ## Setup
 
@@ -13,7 +13,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Generating puzzles
+## Generating jigsaw puzzles
 
 Run the generator CLI to download random images from https://picsum.photos, slice them into a grid, scatter the tiles, and store metadata and images on disk.
 
@@ -36,7 +36,7 @@ gen = JigsawGenerator(output_dir="data", rows=4, cols=4)
 record = gen.create_puzzle_from_path("my_image.jpg")
 ```
 
-## Evaluating model outputs
+## Evaluating jigsaw outputs
 
 Given a stored puzzle id and a candidate solution image (for example the final frame from a model), run the evaluator. It trims borders, resizes to the reference dimensions, compares per-tile similarity, and reports accuracy.
 
@@ -61,8 +61,42 @@ Example JSON result:
 
 Adjust --threshold to control tolerance for per-piece correctness. The default similarity metric uses 1 - mean absolute error between RGB tiles (scaled to [0,1]).
 
+## Generating Sudoku puzzles
+
+```
+python -m puzzle.sudoku.generator 10 --output-dir data/sudoku --clue-target 12 --seed 7
+```
+
+Artifacts per puzzle:
+- Sudoku clues remain black in both puzzle and solution images; filled cells are rendered in blue for clarity.
+
+- data/sudoku/puzzles/<id>_puzzle.png: printable puzzle grid with blanks.
+- data/sudoku/solutions/<id>_solution.png: colored solution grid for reference.
+- data/sudoku/puzzles.json: metadata storing puzzle/solution grids, clue counts, and prompts.
+
+Programmatic example:
+
+```
+from puzzle.sudoku import SudokuGenerator
+
+gen = SudokuGenerator(output_dir="data/sudoku", clue_target=10, seed=101)
+record = gen.create_puzzle()
+```
+
+## Evaluating Sudoku solutions
+
+Provide the evaluator with the metadata file, puzzle id, and a candidate solution image (final frame from the model or a rendered board).
+
+```
+python -m puzzle.sudoku.evaluator data/sudoku/puzzles.json <PUZZLE_ID> candidate.png
+```
+
+The evaluator trims borders, rescales the candidate to the reference solution, reads the digit in each cell, and reports accuracy plus invalid positions.
+
 ## Notes
 
-- The generator fetches images from the network; ensure outbound access or replace with create_puzzle_from_path for offline use.
+- Sudoku OCR relies on Tesseract via `pytesseract`; install the Tesseract binary and ensure it is available on PATH.
+- Jigsaw puzzles fetch images from the network; ensure outbound access or rely on `create_puzzle_from_path` for offline use.
+- Sudoku generation enforces uniqueness by default; use `--no-unique` to accelerate dataset builds when uniqueness is not required.
 - Scatter layout avoids overlaps via random sampling with a deterministic fallback when space is tight.
-- Similarity is a lightweight metric; replace _piece_similarity with a stronger perceptual measure if tighter validation is required.
+- Similarity metrics are lightweight; replace `_piece_similarity` (jigsaw) or Sudoku validation helpers with stronger perceptual or domain-specific checks if tighter validation is required.

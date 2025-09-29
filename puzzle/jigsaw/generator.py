@@ -60,7 +60,7 @@ class ScatterPlacement:
 
 
 @dataclass
-class PuzzleRecord:
+class JigsawPuzzleRecord:
     """Metadata persisted for a single puzzle instance."""
 
     id: str
@@ -89,7 +89,7 @@ class PuzzleRecord:
         }
 
 
-class JigsawGenerator(AbstractPuzzleGenerator[PuzzleRecord]):
+class JigsawGenerator(AbstractPuzzleGenerator[JigsawPuzzleRecord]):
     """Create shuffled jigsaw puzzles from random imagery."""
 
     def __init__(
@@ -128,7 +128,7 @@ class JigsawGenerator(AbstractPuzzleGenerator[PuzzleRecord]):
         image: Image.Image,
         image_source: str,
         puzzle_id: Optional[str] = None,
-    ) -> PuzzleRecord:
+    ) -> JigsawPuzzleRecord:
         """Create a puzzle from a PIL image and return its metadata."""
 
         puzzle_uuid = puzzle_id or str(uuid.uuid4())
@@ -146,7 +146,7 @@ class JigsawGenerator(AbstractPuzzleGenerator[PuzzleRecord]):
             "y": self._compute_axis_edges(solved_image.height, self.rows),
         }
 
-        record = PuzzleRecord(
+        record = JigsawPuzzleRecord(
             id=puzzle_uuid,
             prompt=self.prompt,
             image_source=image_source,
@@ -160,7 +160,7 @@ class JigsawGenerator(AbstractPuzzleGenerator[PuzzleRecord]):
         )
         return record
 
-    def create_random_puzzle(self) -> PuzzleRecord:
+    def create_random_puzzle(self) -> JigsawPuzzleRecord:
         width, height = self.image_size
         random_token = self._rng.randint(0, 1_000_000_000)
         image_url = f"https://picsum.photos/{width}/{height}?random={random_token}"
@@ -173,7 +173,7 @@ class JigsawGenerator(AbstractPuzzleGenerator[PuzzleRecord]):
         *,
         image_source: Optional[str] = None,
         puzzle_id: Optional[str] = None,
-    ) -> PuzzleRecord:
+    ) -> JigsawPuzzleRecord:
         """Utility wrapper that loads an image from disk and creates a puzzle."""
 
         image_path = Path(image_path)
@@ -291,7 +291,7 @@ class JigsawGenerator(AbstractPuzzleGenerator[PuzzleRecord]):
 
 __all__ = [
     "JigsawGenerator",
-    "PuzzleRecord",
+    "JigsawPuzzleRecord",
     "PieceSpec",
     "ScatterPlacement",
 ]

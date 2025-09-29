@@ -3,12 +3,12 @@
 __all__ = [
     "JigsawGenerator",
     "JigsawEvaluator",
-    "EvaluationResult",
+    "JigsawPuzzleRecord",
+    "JigsawEvaluationResult",
     "PieceEvaluation",
-    "PuzzleRecord",
     "PieceSpec",
     "ScatterPlacement",
 ]
 
-from .generator import JigsawGenerator, PuzzleRecord, PieceSpec, ScatterPlacement
-from .evaluator import JigsawEvaluator, EvaluationResult, PieceEvaluation
+from .generator import JigsawGenerator, JigsawPuzzleRecord, PieceSpec, ScatterPlacement
+from .evaluator import JigsawEvaluator, JigsawEvaluationResult, PieceEvaluation
