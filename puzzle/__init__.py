@@ -1,4 +1,4 @@
-"""Puzzle generation and evaluation toolkit."""
+﻿"""Puzzle generation and evaluation toolkit."""
 
 __all__ = [
     "AbstractPuzzleGenerator",
@@ -16,6 +16,11 @@ __all__ = [
     "MirrorPuzzleRecord",
     "MirrorEvaluationResult",
     "MirrorCellEvaluation",
+    "ArcPuzzleGenerator",
+    "ArcPuzzleEvaluator",
+    "ArcPuzzleRecord",
+    "ArcEvaluationResult",
+    "ArcCellEvaluation",
     "PieceEvaluation",
     "CellEvaluation",
 ]
@@ -35,7 +40,6 @@ from .sudoku import (
     SudokuEvaluationResult,
     CellEvaluation,
 )
-
 from .mirror import (
     MirrorGenerator,
     MirrorEvaluator,
@@ -43,3 +47,11 @@ from .mirror import (
     MirrorEvaluationResult,
     MirrorCellEvaluation,
 )
+from .arcagi import (
+    ArcPuzzleGenerator,
+    ArcPuzzleEvaluator,
+    ArcPuzzleRecord,
+    ArcEvaluationResult,
+    ArcCellEvaluation,
+)
+

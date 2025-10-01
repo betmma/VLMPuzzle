@@ -1,4 +1,4 @@
-# Video LM Puzzle Toolkit
+﻿# Video LM Puzzle Toolkit
 
 Utilities for generating shuffled jigsaw puzzles (input images plus metadata) and compact 4x4 Sudoku board challenges, along with evaluators for verifying model reconstructions.
 
@@ -120,3 +120,24 @@ Each right-half cell is compared against its mirrored counterpart by averaging R
 - Sudoku generation enforces uniqueness by default; use `--no-unique` to accelerate dataset builds when uniqueness is not required.
 - Scatter layout avoids overlaps via random sampling with a deterministic fallback when space is tight.
 - Similarity metrics are lightweight; replace `_piece_similarity` (jigsaw) or Sudoku validation helpers with stronger perceptual or domain-specific checks if tighter validation is required.
+
+## Generating ARC puzzles
+
+```
+python -m puzzle.arcagi.generator 5 --dataset data/training --output-dir data/arcagi --metadata data/arcagi/puzzles.json --cell-size 28
+```
+
+Each puzzle image renders every training example as an input/output pair with an arrow pointing from example input to example output. The first evaluation pair is shown with its input grid and a blank answer grid. The matching solution image fills in the correct test output.
+
+Artifacts per puzzle:
+- data/arcagi/puzzles/<id>_puzzle.png: composite image with examples and blank test output.
+- data/arcagi/solutions/<id>_solution.png: identical layout with the correct test output filled in.
+- data/arcagi/puzzles.json: metadata that records the task source and grid placements (including the test output region).
+
+## Evaluating ARC outputs
+
+```
+python -m puzzle.arcagi.evaluator data/arcagi/puzzles.json <PUZZLE_ID> candidate.png
+```
+
+The evaluator aligns the candidate image to the puzzle layout, reads the coloured cells from the test output region, maps RGB values back to ARC palette digits, and compares them to the ground-truth grid.
