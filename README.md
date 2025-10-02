@@ -102,6 +102,7 @@ python -m puzzle.mirror.generator 10 --output-dir data/mirror --rows 6 --cols 8 
 Outputs:
 - data/mirror/puzzles/<id>_puzzle.png: left half colored, right half blank.
 - add `--monochrome` to keep a single hue across all filled cells.
+- use `--aspect-ratio` to add black padding around the outer border.
 - data/mirror/solutions/<id>_solution.png: full mirrored grid reference.
 - data/mirror/puzzles.json: metadata with per-cell colors and layout details.
 
@@ -141,3 +142,6 @@ python -m puzzle.arcagi.evaluator data/arcagi/puzzles.json <PUZZLE_ID> candidate
 ```
 
 The evaluator aligns the candidate image to the puzzle layout, reads the coloured cells from the test output region, maps RGB values back to ARC palette digits, and compares them to the ground-truth grid.
+
+
+

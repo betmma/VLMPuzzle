@@ -1,4 +1,4 @@
-"""Mirror puzzle evaluator for symmetry completion tasks."""
+﻿"""Mirror puzzle evaluator for symmetry completion tasks."""
 
 from __future__ import annotations
 
@@ -80,6 +80,23 @@ class MirrorEvaluator(AbstractPuzzleEvaluator):
 
         rows, cols = map(int, record["grid_size"])
         cell_size = int(record["cell_size"])
+        padding = record.get("cell_padding", [0, 0, 0, 0])
+        pad_left, pad_top, pad_right, pad_bottom = (int(v) for v in (padding + [0] * (4 - len(padding))))
+
+        inner_bounds = record.get("cell_inner_bounds")
+        if inner_bounds and len(inner_bounds) == 4:
+            inner_left, inner_top, inner_right, inner_bottom = (int(v) for v in inner_bounds)
+        else:
+            inner_left = inner_top = 1
+            inner_right = cell_size - 1
+            inner_bottom = cell_size - 1
+
+        inner_width = max(1, inner_right - inner_left)
+        inner_height = max(1, inner_bottom - inner_top)
+
+        shrink_x = max(0, inner_width // 8)
+        shrink_y = max(0, inner_height // 8)
+
         colored_cells = record["colored_cells"]
         left_colors = {(cell["row"], cell["col"]): tuple(cell["color"]) for cell in colored_cells}
         half_cols = cols // 2
@@ -97,18 +114,20 @@ class MirrorEvaluator(AbstractPuzzleEvaluator):
                 expected_color = left_colors.get((row, mirror_col), (255, 255, 255))
                 expected_rgb = np.array(expected_color, dtype=np.float32)
 
-                y0 = row * cell_size
-                y1 = y0 + cell_size
-                x0 = right_col * cell_size
-                x1 = x0 + cell_size
-                shrink = max(1, cell_size // 8)
-                y0s = min(max(y0 + shrink, 0), candidate_arr.shape[0] - 1)
-                y1s = max(min(y1 - shrink, candidate_arr.shape[0]), y0s + 1)
-                x0s = min(max(x0 + shrink, 0), candidate_arr.shape[1] - 1)
-                x1s = max(min(x1 - shrink, candidate_arr.shape[1]), x0s + 1)
+                cell_left = pad_left + right_col * cell_size
+                cell_top = pad_top + row * cell_size
+                x0 = cell_left + inner_left
+                x1 = cell_left + inner_right
+                y0 = cell_top + inner_top
+                y1 = cell_top + inner_bottom
+
+                x0s = min(max(x0 + shrink_x, 0), candidate_arr.shape[1] - 1)
+                x1s = max(min(x1 - shrink_x, candidate_arr.shape[1]), x0s + 1)
+                y0s = min(max(y0 + shrink_y, 0), candidate_arr.shape[0] - 1)
+                y1s = max(min(y1 - shrink_y, candidate_arr.shape[0]), y0s + 1)
 
                 cell_candidate = candidate_arr[y0s:y1s, x0s:x1s]
-                actual_rgb = cell_candidate.mean(axis=(0, 1))
+                actual_rgb = cell_candidate.mean(axis=(0, 1)) if cell_candidate.size else np.zeros(3)
 
                 distance = float(np.linalg.norm(actual_rgb - expected_rgb))
                 is_correct = distance <= color_tolerance
