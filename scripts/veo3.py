@@ -14,7 +14,9 @@ import cv2
 # ====================================
 
 # API配置
-API_KEY = "sk-JqRjLq51Uo2rtppF7Dgct9enWYKd6B8kihG5IsmleyDtVaZb"  # 请替换为你的实际API密钥
+API_KEY = 'api_key.txt'
+with open(API_KEY, 'r', encoding='utf-8') as f:
+    API_KEY = f.read().strip()
 BASE_URL = "https://api.sydney-ai.com/v1"  
 MODEL_NAME = "veo3-frames"  # 使用的模型名称
 
