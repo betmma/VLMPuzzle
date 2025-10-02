@@ -71,6 +71,7 @@ Artifacts per puzzle:
 - Sudoku clues remain black in both puzzle and solution images; filled cells are rendered in blue for clarity.
 
 - data/sudoku/puzzles/<id>_puzzle.png: printable puzzle grid with blanks.
+- use `--aspect-ratio` to add black padding around the outer border while keeping the inner grid square.
 - data/sudoku/solutions/<id>_solution.png: colored solution grid for reference.
 - data/sudoku/puzzles.json: metadata storing puzzle/solution grids, clue counts, and prompts.
 

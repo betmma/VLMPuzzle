@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 
 from veo3 import generate_video_output
 
-PUZZLE_TYPE = 'mirror'
 def _load_puzzle(puzzles_path: str, puzzle_id: str) -> Dict[str, Any]:
     with open(puzzles_path, "r", encoding="utf-8") as handle:
         puzzles = json.load(handle)
@@ -74,13 +73,14 @@ def run_generations_for_puzzle(
     return results
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python scripts/mirrorVote.py <puzzle_id> [attempts] [puzzles_path]")
+    if len(sys.argv) < 3:
+        print("Usage: python scripts/mirrorVote.py <puzzle_type> <puzzle_id> [attempts] [puzzles_path]")
         sys.exit(1)
 
-    puzzle_id_arg = sys.argv[1]
-    attempts_arg = int(sys.argv[2]) if len(sys.argv) > 2 else 3
-    puzzles_path_arg = sys.argv[3] if len(sys.argv) > 3 else f"data/{PUZZLE_TYPE}/puzzles.json"
+    PUZZLE_TYPE = sys.argv[1]
+    puzzle_id_arg = sys.argv[2]
+    attempts_arg = int(sys.argv[3]) if len(sys.argv) > 3 else 3
+    puzzles_path_arg = sys.argv[4] if len(sys.argv) > 4 else f"data/{PUZZLE_TYPE}/puzzles.json"
 
     all_results = run_generations_for_puzzle(
         puzzle_id=puzzle_id_arg,

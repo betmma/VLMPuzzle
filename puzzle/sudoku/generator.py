@@ -31,6 +31,8 @@ class SudokuPuzzleRecord:
     solution_image_path: str
     cell_bboxes: List[List[Tuple[int, int, int, int]]]
     canvas_size: int
+    canvas_dimensions: Tuple[int, int]
+    padding: Tuple[int, int, int, int]
     font: Dict[str, Optional[int]]
 
     def to_dict(self) -> dict:
@@ -46,6 +48,8 @@ class SudokuPuzzleRecord:
                 [list(map(int, bbox)) for bbox in row] for row in self.cell_bboxes
             ],
             "canvas_size": self.canvas_size,
+            "canvas_dimensions": list(self.canvas_dimensions),
+            "padding": list(self.padding),
             "font": self.font,
         }
 
@@ -59,8 +63,9 @@ class SudokuGenerator(AbstractPuzzleGenerator[SudokuPuzzleRecord]):
         *,
         clue_target: int = 12,
         ensure_unique: bool = True,
-        prompt: str = "Fill the Sudoku grid so every row, column, and 2x2 box contains digits 1-4.",
+        prompt: str = "Create a static, smooth, animation that solves the given 4x4 sudoku. Enter the missing numbers one by one. Do not change anything else in the picture. Only fill the numbers in the empty cells so the sudoku is solved properly. A cursor moves and fills the correct number in the empty boxes.",
         canvas_size: int = 360,
+        canvas_aspect_ratio: Optional[float] = None,
         seed: Optional[int] = None,
     ) -> None:
         super().__init__(output_dir)
@@ -70,12 +75,50 @@ class SudokuGenerator(AbstractPuzzleGenerator[SudokuPuzzleRecord]):
         self.ensure_unique = ensure_unique
         self.prompt = prompt
         self.canvas_size = canvas_size
+        (
+            self.pad_left,
+            self.pad_top,
+            self.pad_right,
+            self.pad_bottom,
+            self.canvas_aspect_ratio,
+            self.canvas_dimensions,
+        ) = self._compute_outer_padding(canvas_size, canvas_aspect_ratio)
         self._rng = random.Random(seed)
 
         self.puzzle_dir = self.output_dir / "puzzles"
         self.solution_dir = self.output_dir / "solutions"
         for path in (self.puzzle_dir, self.solution_dir):
             path.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _compute_outer_padding(
+        canvas_size: int,
+        aspect_ratio: Optional[float],
+    ) -> Tuple[int, int, int, int, float, Tuple[int, int]]:
+        base_width = base_height = canvas_size
+        if base_width <= 0 or base_height <= 0:
+            raise ValueError("canvas_size must be positive")
+        base_ratio = base_width / base_height
+        if aspect_ratio is None:
+            ratio = base_ratio
+            pad_left = pad_top = pad_right = pad_bottom = 0
+        else:
+            ratio = float(aspect_ratio)
+            if ratio <= 0:
+                raise ValueError("canvas_aspect_ratio must be positive")
+            if ratio >= base_ratio:
+                extra_width = max(0, int(round(base_height * ratio)) - base_width)
+                pad_left = extra_width // 2
+                pad_right = extra_width - pad_left
+                pad_top = pad_bottom = 0
+            else:
+                extra_height = max(0, int(round(base_width / ratio)) - base_height)
+                pad_top = extra_height // 2
+                pad_bottom = extra_height - pad_top
+                pad_left = pad_right = 0
+        canvas_width = base_width + pad_left + pad_right
+        canvas_height = base_height + pad_top + pad_bottom
+        return pad_left, pad_top, pad_right, pad_bottom, ratio, (canvas_width, canvas_height)
 
     def create_puzzle(self, *, puzzle_id: Optional[str] = None) -> SudokuPuzzleRecord:
         puzzle_uuid = puzzle_id or str(uuid.uuid4())
@@ -116,6 +159,8 @@ class SudokuGenerator(AbstractPuzzleGenerator[SudokuPuzzleRecord]):
             solution_image_path=self.relativize_path(solution_path),
             cell_bboxes=cell_bboxes,
             canvas_size=self.canvas_size,
+            canvas_dimensions=self.canvas_dimensions,
+            padding=(self.pad_left, self.pad_top, self.pad_right, self.pad_bottom),
             font=font_info,
         )
         return record
@@ -230,15 +275,23 @@ class SudokuGenerator(AbstractPuzzleGenerator[SudokuPuzzleRecord]):
         puzzle_grid: Optional[Sequence[Sequence[int]]] = None,
         highlight_solution: bool = False,
     ) -> Image.Image:
-        canvas = Image.new("RGB", (self.canvas_size, self.canvas_size), color="white")
+        canvas = Image.new("RGB", self.canvas_dimensions, color="black")
         draw = ImageDraw.Draw(canvas)
+
+        board_left = self.pad_left
+        board_top = self.pad_top
+        board_right = board_left + self.canvas_size
+        board_bottom = board_top + self.canvas_size
+        draw.rectangle((board_left, board_top, board_right - 1, board_bottom - 1), fill="white")
 
         # Grid lines
         for i in range(GRID_SIZE + 1):
             line_width = 4 if i % SUBGRID_SIZE == 0 else 1
             offset = i * cell_size
-            draw.line((0, offset, self.canvas_size, offset), fill="black", width=line_width)
-            draw.line((offset, 0, offset, self.canvas_size), fill="black", width=line_width)
+            y = board_top + offset
+            x = board_left + offset
+            draw.line((board_left, y, board_right, y), fill="black", width=line_width)
+            draw.line((x, board_top, x, board_bottom), fill="black", width=line_width)
 
         # Digits
         for r in range(GRID_SIZE):
@@ -247,19 +300,19 @@ class SudokuGenerator(AbstractPuzzleGenerator[SudokuPuzzleRecord]):
                 if value == 0:
                     continue
                 text = str(value)
-                x0 = c * cell_size
-                y0 = r * cell_size
+                x0 = board_left + c * cell_size
+                y0 = board_top + r * cell_size
                 bbox = draw.textbbox((0, 0), text, font=font)
                 text_width = bbox[2] - bbox[0]
                 text_height = bbox[3] - bbox[1]
-                x = x0 + (cell_size - text_width) / 2 - bbox[0]
-                y = y0 + (cell_size - text_height) / 2 - bbox[1]
+                x_text = x0 + (cell_size - text_width) / 2 - bbox[0]
+                y_text = y0 + (cell_size - text_height) / 2 - bbox[1]
                 if highlight_solution:
                     is_clue = puzzle_grid is not None and puzzle_grid[r][c] != 0
                     fill = "black" if is_clue else "blue"
                 else:
                     fill = "black"
-                draw.text((x, y), text, fill=fill, font=font)
+                draw.text((x_text, y_text), text, fill=fill, font=font)
         return canvas
 
     def _resolve_font(self, cell_size: int) -> Tuple[ImageFont.FreeTypeFont, Dict[str, Optional[int]]]:
@@ -279,8 +332,8 @@ class SudokuGenerator(AbstractPuzzleGenerator[SudokuPuzzleRecord]):
         for r in range(GRID_SIZE):
             row_boxes: List[Tuple[int, int, int, int]] = []
             for c in range(GRID_SIZE):
-                left = c * cell_size
-                top = r * cell_size
+                left = self.pad_left + c * cell_size
+                top = self.pad_top + r * cell_size
                 row_boxes.append((left, top, left + cell_size, top + cell_size))
             bboxes.append(row_boxes)
         return bboxes
@@ -305,7 +358,8 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("data/sudoku"), help="Where to save artifacts")
     parser.add_argument("--clue-target", type=int, default=12, help="Approximate number of given cells")
     parser.add_argument("--no-unique", action="store_true", help="Skip uniqueness enforcement for faster generation")
-    parser.add_argument("--canvas-size", type=int, default=360, help="Render size in pixels")
+    parser.add_argument("--canvas-size", type=int, default=360, help="Render size in pixels for the Sudoku board")
+    parser.add_argument("--aspect-ratio", type=float, default=None, help="Optional width/height ratio for the full image (adds black padding on outer borders only)")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
     return parser.parse_args(argv)
 
@@ -317,6 +371,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         clue_target=args.clue_target,
         ensure_unique=not args.no_unique,
         canvas_size=args.canvas_size,
+        canvas_aspect_ratio=args.aspect_ratio,
         seed=args.seed,
     )
     metadata_path = generator.output_dir / "puzzles.json"

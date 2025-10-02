@@ -1,4 +1,4 @@
-import json
+﻿import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -64,6 +64,24 @@ class SudokuEvaluatorTests(unittest.TestCase):
 
         self.assertAlmostEqual(result.accuracy, 1.0)
         self.assertTrue(result.is_valid_solution)
+
+    def test_canvas_aspect_ratio_adds_outer_padding(self) -> None:
+        wide_generator = SudokuGenerator(
+            output_dir=self.output_dir,
+            clue_target=24,
+            seed=99,
+            canvas_size=320,
+            canvas_aspect_ratio=1.8,
+        )
+        wide_record = wide_generator.create_puzzle(puzzle_id="sudoku-wide")
+        pad_left, pad_top, pad_right, pad_bottom = wide_record.padding
+        self.assertGreater(pad_left + pad_right, 0)
+        self.assertEqual(pad_top + pad_bottom, 0)
+        width, height = wide_record.canvas_dimensions
+        self.assertEqual(width, wide_record.canvas_size + pad_left + pad_right)
+        self.assertEqual(height, wide_record.canvas_size + pad_top + pad_bottom)
+        self.assertEqual(wide_record.cell_bboxes[0][0][0], pad_left)
+        self.assertEqual(wide_record.cell_bboxes[0][0][1], pad_top)
 
 
 if __name__ == "__main__":
