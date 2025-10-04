@@ -21,6 +21,10 @@ __all__ = [
     "ArcPuzzleRecord",
     "ArcEvaluationResult",
     "ArcCellEvaluation",
+    "MazeGenerator",
+    "MazeEvaluator",
+    "MazePuzzleRecord",
+    "MazeEvaluationResult",
     "PieceEvaluation",
     "CellEvaluation",
 ]
@@ -53,5 +57,11 @@ from .arcagi import (
     ArcPuzzleRecord,
     ArcEvaluationResult,
     ArcCellEvaluation,
+)
+from .maze import (
+    MazeGenerator,
+    MazeEvaluator,
+    MazePuzzleRecord,
+    MazeEvaluationResult,
 )
 

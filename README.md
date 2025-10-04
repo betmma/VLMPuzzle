@@ -18,7 +18,7 @@ pip install -r requirements.txt
 Run the generator CLI to download random images from https://picsum.photos, slice them into a grid, scatter the tiles, and store metadata and images on disk.
 
 ```
-python -m puzzle.jigsaw.generator 5 --rows 3 --cols 3 --size 512 512 --output-dir data --metadata data/puzzles.json --prompt "Solve the jigsaw puzzle" --seed 42
+python -m puzzle.jigsaw.generator 5 --rows 3 --cols 3 --size 512 512 --output-dir data/jigsaw --metadata data/jigsaw/puzzles.json --prompt "Solve the jigsaw puzzle" --seed 42
 ```
 
 Key outputs per puzzle:
@@ -143,6 +143,28 @@ python -m puzzle.arcagi.evaluator data/arcagi/puzzles.json <PUZZLE_ID> candidate
 ```
 
 The evaluator aligns the candidate image to the puzzle layout, reads the coloured cells from the test output region, maps RGB values back to ARC palette digits, and compares them to the ground-truth grid.
+
+## Generating maze puzzles
+
+```
+python -m puzzle.maze.generator 5 --output-dir data/maze --rows 15 --cols 15 --cell-size 32 --aspect-ratio 1.6
+```
+
+Each maze shows black walls, a red start cell, and a green goal cell. The prompt tells the model to draw a single red line from start to goal while staying on the white passages. Solution images include the reference path, but the puzzle frames remain blank so models must supply the line.
+
+Artifacts per puzzle:
+- data/maze/puzzles/<id>_puzzle.png: maze without the path.
+- data/maze/solutions/<id>_solution.png: same maze with the red reference path.
+- data/maze/puzzles.json: metadata with the maze grid, start/goal coordinates, padding, and bounding boxes for each cell.
+
+## Evaluating maze outputs
+
+```
+python -m puzzle.maze.evaluator data/maze/puzzles.json <PUZZLE_ID> candidate.png
+```
+
+The evaluator aligns the candidate image, checks that a continuous red path connects the start and goal cells, and verifies that no red pixels spill into wall cells.
+
 
 
 

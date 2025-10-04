@@ -67,7 +67,7 @@ class JigsawPuzzleRecord:
     prompt: str
     image_source: str
     original_image_path: str
-    input_image_path: str
+    puzzle_image_path: str
     grid: Dict[str, int]
     piece_edges: Dict[str, List[int]]
     pieces: List[PieceSpec]
@@ -80,7 +80,7 @@ class JigsawPuzzleRecord:
             "prompt": self.prompt,
             "image_source": self.image_source,
             "original_image_path": self.original_image_path,
-            "input_image_path": self.input_image_path,
+            "puzzle_image_path": self.puzzle_image_path,
             "grid": self.grid,
             "piece_edges": {k: list(v) for k, v in self.piece_edges.items()},
             "pieces": [piece.to_dict() for piece in self.pieces],
@@ -151,7 +151,7 @@ class JigsawGenerator(AbstractPuzzleGenerator[JigsawPuzzleRecord]):
             prompt=self.prompt,
             image_source=image_source,
             original_image_path=self.relativize_path(original_path),
-            input_image_path=self.relativize_path(input_path),
+            puzzle_image_path=self.relativize_path(input_path),
             grid={"rows": self.rows, "cols": self.cols},
             piece_edges=piece_edges,
             pieces=[piece_spec for piece_spec, _ in pieces],
