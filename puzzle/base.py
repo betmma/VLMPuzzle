@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, Generic, Iterable, List, Optional, TypeVar, Union
+from typing import Any, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar, Union
 
 PathLike = Union[str, Path]
 RecordT = TypeVar("RecordT")
@@ -123,6 +123,168 @@ class AbstractPuzzleEvaluator(ABC):
             candidate = self.base_dir / candidate
         return candidate
 
+    @staticmethod
+    def _coerce_dimension_pair(value: object) -> Optional[Tuple[int, int]]:
+        """Convert a raw canvas dimension payload into a (width, height) pair."""
+
+        if isinstance(value, (list, tuple)) and len(value) >= 2:
+            raw_width, raw_height = value[0], value[1]
+        elif isinstance(value, dict) and {"width", "height"} <= set(value):
+            raw_width, raw_height = value["width"], value["height"]
+        else:
+            return None
+        try:
+            width = int(round(float(raw_width)))
+            height = int(round(float(raw_height)))
+        except (TypeError, ValueError):
+            return None
+        return (width, height) if width > 0 and height > 0 else None
+
+    def _record_canvas_dimensions(
+        self,
+        record: Dict[str, Any],
+        *,
+        fallback: Optional[Tuple[int, int]] = None,
+    ) -> Tuple[int, int]:
+        """Best-effort lookup for the original canvas size stored in metadata."""
+
+        dims = self._coerce_dimension_pair(record.get('canvas_dimensions'))
+        if dims:
+            return dims
+        canvas_size = record.get('canvas_size')
+        if isinstance(canvas_size, (int, float)) and canvas_size > 0:
+            size_int = int(round(float(canvas_size)))
+            return size_int, size_int
+        cell_bboxes = record.get('cell_bboxes')
+        if isinstance(cell_bboxes, Iterable):
+            max_right = 0.0
+            max_bottom = 0.0
+            for row in cell_bboxes:
+                if not isinstance(row, Iterable):
+                    continue
+                for bbox in row:
+                    if not isinstance(bbox, Iterable):
+                        continue
+                    coords = list(bbox)
+                    if len(coords) < 4:
+                        continue
+                    _, _, right, bottom = coords[:4]
+                    try:
+                        max_right = max(max_right, float(right))
+                        max_bottom = max(max_bottom, float(bottom))
+                    except (TypeError, ValueError):
+                        continue
+            if max_right > 0 and max_bottom > 0:
+                return int(round(max_right)), int(round(max_bottom))
+        if fallback is not None:
+            return fallback
+        raise ValueError('Unable to determine canvas dimensions from record')
+
+    def scale_cell_bboxes(
+        self,
+        bboxes: Iterable[Iterable[Iterable[float]]],
+        *,
+        source_size: Tuple[int, int],
+        target_size: Tuple[int, int],
+        margin_px: int = 4,
+    ) -> List[List[Tuple[int, int, int, int]]]:
+        """Scale recorded cell bounding boxes into the coordinate space of an image."""
+
+        source_width, source_height = source_size
+        target_width, target_height = target_size
+        if source_width <= 0 or source_height <= 0:
+            raise ValueError('source_size must contain positive dimensions')
+        if target_width <= 0 or target_height <= 0:
+            raise ValueError('target_size must contain positive dimensions')
+        scale_x = target_width / source_width
+        scale_y = target_height / source_height
+
+        def _clip(value: float, lower: int, upper: int) -> int:
+            return max(lower, min(upper, int(round(value))))
+
+        mapped: List[List[Tuple[int, int, int, int]]] = []
+        for row in bboxes:
+            if not isinstance(row, Iterable):
+                continue
+            mapped_row: List[Tuple[int, int, int, int]] = []
+            for bbox in row:
+                if not isinstance(bbox, Iterable):
+                    continue
+                coords = list(bbox)
+                if len(coords) < 4:
+                    continue
+                left, top, right, bottom = coords[:4]
+                try:
+                    left_f = float(left)
+                    top_f = float(top)
+                    right_f = float(right)
+                    bottom_f = float(bottom)
+                except (TypeError, ValueError):
+                    continue
+                if margin_px > 0:
+                    left_f = max(0.0, left_f + margin_px)
+                    top_f = max(0.0, top_f + margin_px)
+                    right_f = min(float(source_width), right_f - margin_px)
+                    bottom_f = min(float(source_height), bottom_f - margin_px)
+                    if right_f <= left_f:
+                        left_f, right_f = float(left), float(right)
+                    if bottom_f <= top_f:
+                        top_f, bottom_f = float(top), float(bottom)
+                scaled_left = _clip(left_f * scale_x, 0, target_width - 1)
+                scaled_top = _clip(top_f * scale_y, 0, target_height - 1)
+                scaled_right = _clip(right_f * scale_x, scaled_left + 1, target_width)
+                scaled_bottom = _clip(bottom_f * scale_y, scaled_top + 1, target_height)
+                mapped_row.append((scaled_left, scaled_top, scaled_right, scaled_bottom))
+            if mapped_row:
+                mapped.append(mapped_row)
+        if not mapped:
+            raise ValueError('No valid bounding boxes were produced during scaling')
+        return mapped
+
+    def map_cell_bboxes_to_image(
+        self,
+        record: Dict[str, Any],
+        *,
+        target_size: Tuple[int, int],
+        margin_px: int = 4,
+        reference_size: Optional[Tuple[int, int]] = None,
+    ) -> List[List[Tuple[int, int, int, int]]]:
+        """Convenience wrapper to scale recorded cell boxes to a new image size."""
+
+        if 'cell_bboxes' not in record:
+            raise KeyError("Puzzle record is missing 'cell_bboxes'")
+        source_size = reference_size or self._record_canvas_dimensions(record, fallback=target_size)
+        return self.scale_cell_bboxes(
+            record['cell_bboxes'],
+            source_size=source_size,
+            target_size=target_size,
+            margin_px=margin_px,
+        )
+
+
+class EvaluationPayloadReader:
+    """Helper to load evaluator payloads from attempt directories."""
+
+    def __init__(self, *, filename: str = "evaluation.json") -> None:
+        self.filename = filename
+
+    def read_inner_payload(self, attempt_dir: Path) -> Optional[Dict[str, Any]]:
+        evaluation_path = attempt_dir / self.filename
+        if not evaluation_path.exists():
+            return None
+        try:
+            with evaluation_path.open("r", encoding="utf-8") as handle:
+                outer_payload = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            return None
+        stdout_blob = outer_payload.get("stdout")
+        if not stdout_blob:
+            return None
+        try:
+            return json.loads(stdout_blob)
+        except json.JSONDecodeError:
+            return None
+
     @abstractmethod
     def evaluate(self, puzzle_id: str, *args, **kwargs):
         """Evaluate a candidate solution for the given puzzle."""
@@ -131,5 +293,6 @@ class AbstractPuzzleEvaluator(ABC):
 __all__ = [
     "AbstractPuzzleGenerator",
     "AbstractPuzzleEvaluator",
+    "EvaluationPayloadReader",
     "PathLike",
 ]

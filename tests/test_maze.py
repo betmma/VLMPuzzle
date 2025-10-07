@@ -33,6 +33,21 @@ class MazeEvaluatorTests(unittest.TestCase):
         self.assertTrue(result.touches_goal)
         self.assertFalse(result.stray_in_walls)
 
+    def test_zoomed_solution_is_supported(self) -> None:
+        with Image.open(self._solution_image_path()) as image:
+            scale = 1.3
+            target_size = (int(image.width * scale), int(image.height * scale))
+            resample_attr = getattr(Image, 'Resampling', Image)
+            resample_filter = getattr(resample_attr, 'NEAREST')
+            zoomed = image.resize(target_size, resample=resample_filter)
+        zoomed_path = Path(self.tmp.name) / 'maze_zoomed.png'
+        zoomed.save(zoomed_path)
+
+        result = self.evaluator.evaluate(self.record.id, zoomed_path)
+        self.assertTrue(result.connected)
+        self.assertTrue(result.touches_goal)
+        self.assertFalse(result.stray_in_walls)
+
     def test_wall_overlap_is_flagged(self) -> None:
         candidate_path = self.output_dir / "wall_overlap.png"
         with Image.open(self._solution_image_path()) as image:

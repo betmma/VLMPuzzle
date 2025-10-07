@@ -85,12 +85,18 @@ class SudokuEvaluator(AbstractPuzzleEvaluator):
         if not candidate_path.exists():
             raise FileNotFoundError(f"Candidate image missing: {candidate_path}")
 
+        with Image.open(solution_path) as solution_image_obj:
+            solution_size = solution_image_obj.size
         candidate_image_obj = Image.open(candidate_path).convert("RGB")
 
         solution_grid = [[int(value) for value in row] for row in record["solution_grid"]]
         puzzle_grid = [[int(value) for value in row] for row in record["puzzle_grid"]]
         grid_size = len(solution_grid)
-        cell_bboxes = self._load_cell_bboxes(record, candidate_image_obj.size, grid_size)
+        cell_bboxes = self.map_cell_bboxes_to_image(
+            record,
+            target_size=candidate_image_obj.size,
+            reference_size=solution_size,
+        )
 
         debug_path: Optional[Path]
         debug_records: Optional[List[dict]]
@@ -334,19 +340,6 @@ class SudokuEvaluator(AbstractPuzzleEvaluator):
             debug_records.append(debug_entry)
         return predicted
 
-    def _load_cell_bboxes(
-        self,
-        record: dict,
-        image_size: Tuple[int, int],
-        grid_size: int,
-    ) -> List[List[Tuple[int, int, int, int]]]:
-        bboxes_data = record.get("cell_bboxes")
-        recorded_size = tuple(record.get("canvas_dimensions", (0, 0)))
-        transform=lambda bbox: (int((bbox[0]+4) * image_size[0] / recorded_size[0]), int((bbox[1]+4) * image_size[1] / recorded_size[1]), int((bbox[2]-4) * image_size[0] / recorded_size[0]), int((bbox[3]-4) * image_size[1] / recorded_size[1]))
-        return [
-            [transform(bbox) for bbox in row]
-            for row in bboxes_data
-        ]
     def _is_valid_solution(self, grid: List[List[int]]) -> bool:
         size = len(grid)
         if size == 0:

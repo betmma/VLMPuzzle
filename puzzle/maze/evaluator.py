@@ -11,11 +11,6 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 import numpy as np
 from PIL import Image
 
-try:
-    RESAMPLE_LANCZOS = Image.Resampling.LANCZOS
-except AttributeError:  # pragma: no cover
-    RESAMPLE_LANCZOS = Image.LANCZOS
-
 from ..base import AbstractPuzzleEvaluator, PathLike
 
 RED_THRESHOLD = 150
@@ -58,21 +53,26 @@ class MazeEvaluator(AbstractPuzzleEvaluator):
             raise FileNotFoundError(f"Candidate image not found: {candidate_path}")
 
         solution_path = self.resolve_path(record["solution_image_path"])
-        solution_image = Image.open(solution_path).convert("RGB")
+        if not solution_path.exists():
+            raise FileNotFoundError(f"Solution image not found: {solution_path}")
+        with Image.open(solution_path) as solution_image_obj:
+            solution_size = solution_image_obj.size
+
         candidate_image_obj = Image.open(candidate_path).convert("RGB")
-        candidate_processed = self._align(candidate_image_obj, solution_image.size, trim_tolerance)
+        cell_bboxes = self.map_cell_bboxes_to_image(
+            record,
+            target_size=candidate_image_obj.size,
+            reference_size=solution_size,
+        )
+        _ = trim_tolerance  # retained for backwards compatibility
 
         maze_grid: List[List[int]] = [list(map(int, row)) for row in record["maze_grid"]]
         rows = len(maze_grid)
         cols = len(maze_grid[0]) if rows else 0
-        cell_bboxes = [
-            [tuple(map(int, bbox)) for bbox in row]
-            for row in record["cell_bboxes"]
-        ]
         start = tuple(map(int, record["start"]))
         goal = tuple(map(int, record["goal"]))
 
-        candidate_arr = np.asarray(candidate_processed)
+        candidate_arr = np.asarray(candidate_image_obj)
 
         red_cells: List[Tuple[int, int]] = []
         stray_in_walls = False
@@ -118,36 +118,6 @@ class MazeEvaluator(AbstractPuzzleEvaluator):
         )
 
     # ------------------------------------------------------------------
-
-    def _align(
-        self,
-        image: Image.Image,
-        reference_size: Tuple[int, int],
-        trim_tolerance: int,
-    ) -> Image.Image:
-        if image.size == reference_size:
-            return image
-        trimmed = self._trim_borders(image, tolerance=trim_tolerance)
-        if trimmed.size != reference_size:
-            trimmed = trimmed.resize(reference_size, RESAMPLE_LANCZOS)
-        return trimmed
-
-    @staticmethod
-    def _trim_borders(image: Image.Image, *, tolerance: int = 12) -> Image.Image:
-        arr = np.asarray(image)
-        if arr.size == 0:
-            return image
-        if arr.ndim == 3:
-            diff = np.max(np.abs(arr - arr[0, 0]), axis=2)
-        else:
-            diff = np.abs(arr - arr[0, 0])
-        mask = diff > tolerance
-        if not np.any(mask):
-            return image
-        ys, xs = np.where(mask)
-        top, bottom = int(ys.min()), int(ys.max())
-        left, right = int(xs.min()), int(xs.max())
-        return image.crop((left, top, right + 1, bottom + 1))
 
     @staticmethod
     def _is_red(pixels: np.ndarray) -> bool:

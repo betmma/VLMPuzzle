@@ -147,7 +147,7 @@ The evaluator aligns the candidate image to the puzzle layout, reads the coloure
 ## Generating maze puzzles
 
 ```
-python -m puzzle.maze.generator 5 --output-dir data/maze --rows 15 --cols 15 --cell-size 32 --aspect-ratio 1.6
+python -m puzzle.maze.generator 5 --output-dir data/maze --rows 15 --cols 15 --cell-size 32 --aspect-ratio 1.7777
 ```
 
 Each maze shows black walls, a red start cell, and a green goal cell. The prompt tells the model to draw a single red line from start to goal while staying on the white passages. Solution images include the reference path, but the puzzle frames remain blank so models must supply the line.

@@ -188,7 +188,7 @@ class JigsawGenerator(AbstractPuzzleGenerator[JigsawPuzzleRecord]):
 
     def _download_image(self, url: str, *, timeout: int = 20) -> Image.Image:
         try:
-            response = requests.get(url, timeout=timeout)
+            response = requests.get(url, timeout=timeout, proxies={})
             response.raise_for_status()
         except requests.RequestException as exc:  # pragma: no cover - network failure
             raise RuntimeError(f"Failed to download image from {url}") from exc

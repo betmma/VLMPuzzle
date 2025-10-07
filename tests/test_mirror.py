@@ -59,6 +59,20 @@ class MirrorEvaluatorTests(unittest.TestCase):
         self.assertEqual(result.correct_cells, result.total_cells)
         self.assertAlmostEqual(result.accuracy, 1.0)
 
+    def test_zoomed_solution_scores_full_accuracy(self) -> None:
+        with Image.open(self._solution_image_path()) as image:
+            scale = 1.35
+            resample_attr = getattr(Image, 'Resampling', Image)
+            resample_filter = getattr(resample_attr, 'NEAREST')
+            zoomed_size = (int(image.width * scale), int(image.height * scale))
+            zoomed = image.resize(zoomed_size, resample=resample_filter)
+        zoomed_path = Path(self.tmp.name) / 'mirror_zoomed.png'
+        zoomed.save(zoomed_path)
+
+        result = self.evaluator.evaluate(self.record.id, zoomed_path)
+        self.assertEqual(result.correct_cells, result.total_cells)
+        self.assertAlmostEqual(result.accuracy, 1.0)
+
     def test_random_image_scores_low_accuracy(self) -> None:
         candidate_path = Path(self.tmp.name) / "random.png"
         pad_left, pad_top, pad_right, pad_bottom = self.record.cell_padding

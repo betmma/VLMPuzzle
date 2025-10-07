@@ -52,15 +52,18 @@ class SudokuEvaluatorTests(unittest.TestCase):
         self.assertFalse(result.is_valid_solution)
         self.assertIsNone(next(cell.predicted for cell in incorrect_cells if cell.row == 0 and cell.col == 0))
 
-    def test_padding_is_trimmed_before_scoring(self) -> None:
+    def test_zoomed_solution_scores_full_accuracy(self) -> None:
         solution_path = self._solution_image_path()
         with Image.open(solution_path) as image:
-            padded = Image.new("RGB", (image.width + 40, image.height + 40), (200, 200, 200))
-            padded.paste(image, (20, 20))
-        padded_path = Path(self.tmp.name) / "padded.png"
-        padded.save(padded_path)
+            scale = 1.4
+            target_size = (int(image.width * scale), int(image.height * scale))
+            resample_attr = getattr(Image, 'Resampling', Image)
+            resample_filter = getattr(resample_attr, 'NEAREST')
+            zoomed = image.resize(target_size, resample=resample_filter)
+        zoomed_path = Path(self.tmp.name) / "zoomed.png"
+        zoomed.save(zoomed_path)
 
-        result = self.evaluator.evaluate(self.record.id, padded_path, trim_tolerance=20)
+        result = self.evaluator.evaluate(self.record.id, zoomed_path)
 
         self.assertAlmostEqual(result.accuracy, 1.0)
         self.assertTrue(result.is_valid_solution)

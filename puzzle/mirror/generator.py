@@ -77,7 +77,7 @@ class MirrorGenerator(AbstractPuzzleGenerator[MirrorPuzzleRecord]):
         cols: int = 8,
         cell_size: int = 48,
         cell_aspect_ratio: Optional[float] = None,
-        prompt: str = "Mirror the colors from the left half onto the right half of the grid.",
+        prompt: str = "Instantly reflect this pattern along the central, vertical axis while keeping the existing colored pattern without modification. Static camera perspective, no zoom or pan.",
         left_fill_ratio: float = 0.6,
         monochrome: bool = False,
         seed: Optional[int] = None,
@@ -269,7 +269,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument("--fill", type=float, default=0.6, help="Fraction of left-half cells to color")
     parser.add_argument("--monochrome", action="store_true", help="Use a single color for all filled cells")
-    parser.add_argument("--prompt", type=str, default="Mirror the colors from the left half onto the right half of the grid.")
+    parser.add_argument("--prompt", type=str, default="Instantly reflect this pattern along the central, vertical axis while keeping the existing colored pattern without modification. Static camera perspective, no zoom or pan.")
     parser.add_argument("--seed", type=int, default=None)
     return parser.parse_args(argv)
 
@@ -281,7 +281,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         rows=args.rows,
         cols=args.cols,
         cell_size=args.cell_size,
-        cell_aspect_ratio=args.cell_aspect_ratio,
+        cell_aspect_ratio=args.aspect_ratio,
         left_fill_ratio=args.fill,
         monochrome=args.monochrome,
         prompt=args.prompt,

@@ -1,5 +1,6 @@
 # generate_video_output(input_image_path, prompt_text) -> output_directory_path
 import os
+os.environ['NO_PROXY'] = '*'
 import base64
 import re
 import requests
@@ -16,12 +17,12 @@ import cv2
 # API配置
 API_KEY = 'api_key.txt'
 with open(API_KEY, 'r', encoding='utf-8') as f:
-    API_KEY = f.read().strip()
-BASE_URL = "https://api.sydney-ai.com/v1"  
-MODEL_NAME = "veo3-frames"  # 使用的模型名称
+    API_KEY = f.read().split('\n')[0].strip()
+BASE_URL = 'https://jy.ai-wx.cn/v1'#"https://api.sydney-ai.com/v1"  
+MODEL_NAME = 'sora_video2'#"veo3-frames"  # 使用的模型名称
 
-DEFAULT_INPUT_IMAGE = r"C:\32\python\fdu\18-video puzzle\data\mirror\puzzles\11f4cfb1-6c21-4623-9716-531693547901_puzzle.png"
-DEFAULT_PROMPT = "Mirror the colors from the left half onto the right half of the grid. you are not allowed to change anything in left half."
+DEFAULT_INPUT_IMAGE = r"data/mirror/puzzles/c92274c1-deae-4f22-ab1a-ae5a8039694f_puzzle.png"
+DEFAULT_PROMPT = "Instantly reflect this pattern along the central, vertical axis while keeping the existing colored pattern without modification. Static camera perspective, no zoom or pan."
 
 # 重试设置
 MAX_RETRIES = 1  # 最大重试次数
@@ -89,7 +90,7 @@ def save_base64_image(base64_data, output_dir, image_index):
 def download_image_from_url(url, output_dir, image_index):
     """从URL下载图片到本地"""
     try:
-        response = requests.get(url, stream=True)
+        response = requests.get(url, stream=True, proxies={})
         response.raise_for_status()
 
         # 获取文件扩展名
@@ -120,7 +121,7 @@ def download_image_from_url(url, output_dir, image_index):
 def download_video_from_url(url, output_dir, video_index):
     """从URL下载视频到本地"""
     try:
-        response = requests.get(url, stream=True)
+        response = requests.get(url, stream=True, proxies={})
         response.raise_for_status()
 
         url_path = url.split("?", 1)[0]
@@ -292,7 +293,7 @@ def call_api_raw(api_key, base_url, model, messages, timeout=API_TIMEOUT, use_st
         if use_stream:
             print("使用流式响应模式...")
 
-        response = requests.post(url, headers=headers, json=data, timeout=timeout, stream=use_stream)
+        response = requests.post(url, headers=headers, json=data, timeout=timeout, stream=use_stream, proxies={})
         response.raise_for_status()
 
         if use_stream:
