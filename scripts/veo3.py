@@ -563,6 +563,26 @@ def generate_video_output(input_image_path, prompt_text):
 
     return output_directory
 
+def generate_video_output_multiple_tries(input_image_path, prompt_text, attempts=3):
+    """retry multiple times to generate video output"""
+    result = None
+    for attempt in range(1, attempts + 1):
+        try:
+            print(f"\n=== 第 {attempt} 次尝试生成视频 ===")
+            result = generate_video_output(input_image_path, prompt_text)
+            result_png = os.path.join(result, "result.png")
+            if not os.path.exists(result_png):
+                raise FileNotFoundError(f"Expected result frame not found at {result_png}")
+            break
+        except Exception as e:
+            print(f"尝试失败: {e}")
+            if attempt == attempts:
+                print("已达到最大尝试次数，停止尝试。")
+                raise
+            else:
+                print("稍后重试...")
+                time.sleep(2)
+    return result
 
 def main():
     output_dir = generate_video_output(DEFAULT_INPUT_IMAGE, DEFAULT_PROMPT)

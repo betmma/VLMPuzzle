@@ -6,7 +6,7 @@ import sys
 from datetime import datetime
 from typing import Any, Dict, List
 
-from veo3 import generate_video_output
+from veo3 import generate_video_output_multiple_tries
 
 def _load_puzzle(puzzles_path: str, puzzle_id: str) -> Dict[str, Any]:
     with open(puzzles_path, "r", encoding="utf-8") as handle:
@@ -82,7 +82,7 @@ def run_generations_for_puzzle(
 
     results: List[Dict[str, Any]] = []
     for attempt in range(1, attempts + 1):
-        output_dir = generate_video_output(image_path, prompt)
+        output_dir = generate_video_output_multiple_tries(image_path, prompt)
         result_png = os.path.join(output_dir, "result.png")
         if not os.path.exists(result_png):
             raise FileNotFoundError(f"Expected result frame not found at {result_png}")

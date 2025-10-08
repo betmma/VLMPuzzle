@@ -265,37 +265,37 @@ def summarize_monochrome_votes(
         )
         output_lines.append(f"  Attempts evaluated: {len(attempt_payloads)}")
         output_lines.append(f"  Mirror cells: {total_positions}")
-        output_lines.append("  Cells:")
-        for position in positions:
-            row, col = position
-            vote_info = vote_results[position]
-            vote_choice = format_prediction(vote_info["choice"])
-            expected_label = format_prediction(vote_info["expected"])
-            votes_display = ", ".join(
-                f"{format_prediction(value)}:{count}" for value, count in sorted(vote_info["votes"].items())
-            ) or "no votes"
-            output_lines.append(
-                f"    (r{row}, c{col}) expected {expected_label} | vote {vote_choice} | votes [{votes_display}]"
-            )
+        # output_lines.append("  Cells:")
+        # for position in positions:
+        #     row, col = position
+        #     vote_info = vote_results[position]
+        #     vote_choice = format_prediction(vote_info["choice"])
+        #     expected_label = format_prediction(vote_info["expected"])
+        #     votes_display = ", ".join(
+        #         f"{format_prediction(value)}:{count}" for value, count in sorted(vote_info["votes"].items())
+        #     ) or "no votes"
+        #     output_lines.append(
+        #         f"    (r{row}, c{col}) expected {expected_label} | vote {vote_choice} | votes [{votes_display}]"
+        #     )
 
-        output_lines.append("  Attempts:")
-        for attempt_name in sorted(per_attempt_correct.keys()):
-            payload = attempt_payloads[attempt_name]
-            cells = payload["cells"]
-            entries = []
-            for position in positions:
-                cell = cells.get(position)
-                predicted_label = classify_monochrome_prediction(
-                    cell.get("actual_color") if cell else None,
-                    monochrome_color,
-                )
-                entries.append(
-                    f"(r{position[0]},c{position[1]})={format_prediction(predicted_label)}"
-                )
-            rate = per_attempt_correct[attempt_name]
-            output_lines.append(
-                f"    {attempt_name}: {'; '.join(entries)} | correct rate {rate:.0%}"
-            )
+        # output_lines.append("  Attempts:")
+        # for attempt_name in sorted(per_attempt_correct.keys()):
+        #     payload = attempt_payloads[attempt_name]
+        #     cells = payload["cells"]
+        #     entries = []
+        #     for position in positions:
+        #         cell = cells.get(position)
+        #         predicted_label = classify_monochrome_prediction(
+        #             cell.get("actual_color") if cell else None,
+        #             monochrome_color,
+        #         )
+        #         entries.append(
+        #             f"(r{position[0]},c{position[1]})={format_prediction(predicted_label)}"
+        #         )
+        #     rate = per_attempt_correct[attempt_name]
+        #     output_lines.append(
+        #         f"    {attempt_name}: {'; '.join(entries)} | correct rate {rate:.0%}"
+        #     )
 
         output_lines.append(f"  Vote correct rate: {vote_rate:.0%}")
         output_lines.append("  Individual correct rates:")
