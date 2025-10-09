@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from puzzle.base import EvaluationPayloadReader
+from puzzle.base import EvaluationPayloadReader, AbstractVoteSummarizer
 
 Position = Tuple[int, int]
 
@@ -227,4 +227,17 @@ def summarize_votes(vote_root: Path) -> bool:
     return True
 
 
-__all__ = ["load_attempt", "format_prediction", "summarize_votes"]
+__all__ = [
+    "load_attempt",
+    "format_prediction",
+    "summarize_votes",
+    "SudokuVoteSummarizer",
+]
+
+
+class SudokuVoteSummarizer(AbstractVoteSummarizer):
+    """Summarizer implementation for Sudoku vote outputs."""
+
+    def summarize(self, vote_root: Path, *, prefix_newline: bool = False) -> bool:
+        # Sudoku summaries always print; ignore prefix_newline for compatibility
+        return summarize_votes(vote_root)

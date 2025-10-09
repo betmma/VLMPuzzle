@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from puzzle.base import EvaluationPayloadReader
+from puzzle.base import EvaluationPayloadReader, AbstractVoteSummarizer
 
 Position = Tuple[int, int]
 Color = Tuple[float, float, float]
@@ -367,5 +367,13 @@ __all__ = [
     "format_color",
     "format_prediction",
     "summarize_monochrome_votes",
+    "MirrorVoteSummarizer",
 ]
+
+
+class MirrorVoteSummarizer(AbstractVoteSummarizer):
+    """Summarizer implementation for mirror puzzle vote outputs."""
+
+    def summarize(self, vote_root: Path, *, prefix_newline: bool = False) -> bool:
+        return summarize_monochrome_votes(vote_root, prefix_newline=prefix_newline)
 

@@ -290,9 +290,30 @@ class EvaluationPayloadReader:
         """Evaluate a candidate solution for the given puzzle."""
 
 
+class AbstractVoteSummarizer(ABC):
+    """Interface for modules that summarize voting results across attempts.
+
+    Concrete implementations should implement a single entrypoint `summarize`
+    that scans a vote output directory and prints a human-readable summary.
+    The method returns True if any summaries were produced, or False otherwise.
+    """
+
+    @abstractmethod
+    def summarize(self, vote_root: Path, *, prefix_newline: bool = False) -> bool:
+        """Summarize votes written under `vote_root`.
+
+        Implementations may choose how to locate per-puzzle and per-attempt
+        outputs within `vote_root` and what details to aggregate.
+
+        Returns True if a summary was printed, False if nothing to report.
+        """
+        raise NotImplementedError
+
+
 __all__ = [
     "AbstractPuzzleGenerator",
     "AbstractPuzzleEvaluator",
     "EvaluationPayloadReader",
+    "AbstractVoteSummarizer",
     "PathLike",
 ]
