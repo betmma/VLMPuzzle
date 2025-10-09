@@ -64,4 +64,10 @@ from .maze import (
     MazePuzzleRecord,
     MazeEvaluationResult,
 )
+from .rects import (
+    RectsGenerator,
+    RectsEvaluator,
+    RectsPuzzleRecord,
+    RectsEvaluationResult,
+)
 
