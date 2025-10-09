@@ -1,4 +1,5 @@
 # generate_video_output(input_image_path, prompt_text) -> output_directory_path
+# generate_video_output_multiple_tries(input_image_path, prompt_text, attempts=3) -> output_directory_path
 import os
 os.environ['NO_PROXY'] = '*'
 import base64
@@ -7,6 +8,7 @@ import requests
 import time
 import json
 from datetime import datetime
+import multiprocessing as _mp
 from openai import OpenAI
 import cv2
 
@@ -48,7 +50,10 @@ def prepare_image_data(image_path):
 
 def create_output_directory():
     """创建输出目录"""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Include microseconds to avoid collisions in multiprocessing
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    # trim to milliseconds for shorter names
+    timestamp = ts[:-3]
     base_dir = os.path.join("data", "output")
     os.makedirs(base_dir, exist_ok=True)
     candidate = os.path.join(base_dir, f"output_{timestamp}")
@@ -583,6 +588,46 @@ def generate_video_output_multiple_tries(input_image_path, prompt_text, attempts
                 print("稍后重试...")
                 time.sleep(2)
     return result
+
+def _mp_worker_generate(arg_tuple):
+    """Worker function for multiprocessing.
+    arg_tuple: (input_image_path_or_list, prompt_text, attempts)
+    Returns output directory path.
+    """
+    input_image_path, prompt_text, attempts = arg_tuple
+    if attempts and attempts > 1:
+        return generate_video_output_multiple_tries(input_image_path, prompt_text, attempts=attempts)
+    return generate_video_output(input_image_path, prompt_text)
+
+def generate_video_outputs_multiprocess(image_paths_list, prompt_texts, processes=None, attempts=1, chunksize=1):
+    """Generate multiple video outputs in parallel using multiprocessing.
+
+    Args:
+        image_paths_list: list where each item is either a string path or a list of image paths
+                          for a single request. Length must match `prompt_texts`.
+        prompt_texts: list of prompt strings aligned with `image_paths_list`.
+        processes: number of worker processes to use. Defaults to CPU count.
+        attempts: per-item retry attempts (>=1). If >1, uses generate_video_output_multiple_tries.
+        chunksize: chunksize passed to Pool.map for throughput tuning.
+
+    Returns:
+        List of output directory paths in the same order as inputs.
+    """
+    if not isinstance(image_paths_list, (list, tuple)) or not isinstance(prompt_texts, (list, tuple)):
+        raise TypeError("image_paths_list and prompt_texts must be lists/tuples")
+    if len(image_paths_list) != len(prompt_texts):
+        raise ValueError("image_paths_list and prompt_texts must have the same length")
+    if attempts is None or attempts < 1:
+        attempts = 1
+
+    tasks = [(image_paths_list[i], prompt_texts[i], attempts) for i in range(len(prompt_texts))]
+
+    # Use 'spawn' for cross-platform safety (Windows/macOS/Linux)
+    ctx = _mp.get_context("spawn")
+    with ctx.Pool(processes=processes) as pool:
+        results = pool.map(_mp_worker_generate, tasks, chunksize=chunksize)
+
+    return results
 
 def main():
     output_dir = generate_video_output(DEFAULT_INPUT_IMAGE, DEFAULT_PROMPT)
