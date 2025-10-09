@@ -131,7 +131,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--prompt",
         type=str,
-        default="Each row contains input and output grids. Learn the pattern and generate the output grid for the last input while keeping existing patterns without modification. Static camera perspective, no zoom or pan.",
+        default="Each row contains input and output grids. Learn the pattern and generate the output grid for the last input while keeping existing patterns without modification. Static camera perspective, no zoom or pan. In portrait.",
         help="Prompt text stored with each puzzle record",
     )
     parser.add_argument(

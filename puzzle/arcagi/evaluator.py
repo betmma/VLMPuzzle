@@ -160,13 +160,14 @@ class ArcPuzzleEvaluator(AbstractPuzzleEvaluator):
         reference_size: Tuple[int, int],
         trim_tolerance: int,
     ) -> Image.Image:
+        """Resize candidate image to match the solution size without trimming.
+
+        The trim_tolerance parameter is ignored to preserve interface compatibility.
+        """
         image = image.convert("RGB")
         if image.size == reference_size:
             return image
-        trimmed = self._trim_borders(image, tolerance=trim_tolerance)
-        if trimmed.size != reference_size:
-            trimmed = trimmed.resize(reference_size, RESAMPLE_LANCZOS)
-        return trimmed
+        return image.resize(reference_size, RESAMPLE_LANCZOS)
 
     @staticmethod
     def _trim_borders(image: Image.Image, *, tolerance: int = 12) -> Image.Image:

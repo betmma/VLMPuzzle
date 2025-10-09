@@ -105,6 +105,88 @@ def process_puzzle(
     return results
 
 
+def _iter_attempt_evaluations(vote_root: Path) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    if not vote_root.exists():
+        return records
+    for attempt_eval in vote_root.rglob("attempt_*/evaluation.json"):
+        try:
+            with attempt_eval.open("r", encoding="utf-8") as handle:
+                rec = json.load(handle)
+            if isinstance(rec, dict):
+                records.append(rec)
+        except Exception:
+            continue
+    return records
+
+
+def summarize_vote_root(vote_root: Path, metadata_path: Path) -> Dict[str, Any]:
+    """Re-evaluate all attempts under vote_root and compute summary.
+
+    - Re-runs ArcPuzzleEvaluator against each attempt's result.png.
+    - Counts an attempt as correct only if all cells are correct.
+    - Reports attempt-level perfect ratio and per-puzzle success rate.
+    - Updates each attempt's evaluation.json with the recomputed evaluation.
+    """
+    evals = _iter_attempt_evaluations(vote_root)
+    evaluator = ArcPuzzleEvaluator(metadata_path)
+
+    total_attempts = 0
+    perfect_attempts = 0
+    by_puzzle: Dict[str, Dict[str, Any]] = {}
+
+    for rec in evals:
+        puzzle_id = str(rec.get("puzzle_id", ""))
+        result_png = rec.get("result_png") or ""
+        if not puzzle_id or not result_png:
+            continue
+        result_path = Path(result_png)
+        if not result_path.exists():
+            continue
+
+        try:
+            result = evaluator.evaluate(puzzle_id, result_path)
+        except Exception:
+            continue
+
+        total_attempts += 1
+        correct = int(result.correct_cells)
+        total = int(result.total_cells)
+        is_perfect = total > 0 and (correct == total)
+        if is_perfect:
+            perfect_attempts += 1
+
+        # Update per-puzzle aggregation
+        if puzzle_id not in by_puzzle:
+            by_puzzle[puzzle_id] = {"attempts": 0, "perfect": False}
+        by_puzzle[puzzle_id]["attempts"] += 1
+        by_puzzle[puzzle_id]["perfect"] = by_puzzle[puzzle_id]["perfect"] or is_perfect
+
+        # Persist recomputed evaluation back to attempt evaluation.json
+        rec["evaluation"] = result.to_dict()
+        eval_json_path = Path(rec.get("vote_output_directory") or "").joinpath("evaluation.json")
+        try:
+            if eval_json_path.parent.exists():
+                write_json(eval_json_path, rec)
+        except Exception:
+            pass
+
+    total_puzzles = len([p for p in by_puzzle.keys() if p])
+    puzzles_with_perfect = sum(1 for p in by_puzzle.values() if p.get("perfect"))
+    attempt_accuracy = (perfect_attempts / total_attempts) if total_attempts else 0.0
+    puzzle_success_rate = (puzzles_with_perfect / total_puzzles) if total_puzzles else 0.0
+
+    return {
+        "vote_root": vote_root.as_posix(),
+        "attempts_total": total_attempts,
+        "attempts_perfect": perfect_attempts,
+        "attempts_average_correctness": attempt_accuracy,
+        "puzzles_total": total_puzzles,
+        "puzzles_with_any_perfect_attempt": puzzles_with_perfect,
+        "puzzle_success_rate": puzzle_success_rate,
+    }
+
+
 def parse_args(argv = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run k generations per ARC-AGI puzzle for a range of indices and evaluate each.")
     parser.add_argument("m", type=int, help="1-based start index (inclusive)")
@@ -112,11 +194,17 @@ def parse_args(argv = None) -> argparse.Namespace:
     parser.add_argument("k", type=int, help="Number of responses per puzzle")
     parser.add_argument("--metadata", type=Path, default=Path("data/arcagi/puzzles.json"))
     parser.add_argument("--vote-root", type=Path, default=Path("data/voteOutputArcagi"))
+    parser.add_argument("--summarize", action="store_true", help="Only summarize existing evaluations under --vote-root and exit.")
     return parser.parse_args(list(argv) if argv is not None else None)
 
 
 def main(argv = None) -> None:
     args = parse_args(argv)
+    # If summarizing, re-evaluate and print summary then exit
+    if args.summarize:
+        summary = summarize_vote_root(args.vote_root.resolve(), args.metadata.resolve())
+        print(json.dumps(summary, indent=2))
+        return
     if args.m <= 0 or args.n <= 0 or args.k <= 0:
         raise ValueError("m, n, k must be positive integers")
     if args.n < args.m:
