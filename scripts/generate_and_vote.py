@@ -1,6 +1,8 @@
 import argparse
 import ast
 import json
+import os
+import multiprocessing as mp
 import subprocess
 import sys
 from pathlib import Path
@@ -107,6 +109,13 @@ def run_mirror_vote(puzzle_type: str, puzzle_id: str, attempts: int, puzzles_pat
         )
 
 
+def _run_vote_task(params: Tuple[str, str, int, Path]) -> str:
+    puzzle_type, puzzle_id, attempts, puzzles_path = params
+    # Execute the vote run for a single puzzle and return its id on success.
+    run_mirror_vote(puzzle_type, puzzle_id, attempts, puzzles_path)
+    return puzzle_id
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate puzzles of one type via CLI and run mirrorVote.py for each."
@@ -137,6 +146,12 @@ def main() -> None:
         default=[],
         help="Additional generator CLI arguments as key=value entries (repeatable).",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="Number of parallel worker processes for voting (default: min(count, CPU cores))",
+    )
 
     args = parser.parse_args()
 
@@ -166,12 +181,30 @@ def main() -> None:
     new_records = collect_new_records(metadata_path, len(before_records), args.count)
     print(f"Generated {len(new_records)} {puzzle_type} puzzle(s). Metadata recorded at {metadata_path}.")
 
+    # Parallelize mirrorVote executions across generated puzzles.
+    tasks: List[Tuple[str, str, int, Path]] = []
     for record in new_records:
         puzzle_id = record.get("id")
         if not puzzle_id:
             raise ValueError("Generated puzzle record missing 'id'")
-        print(f"Running mirrorVote.py for puzzle {puzzle_id}...")
-        run_mirror_vote(puzzle_type, puzzle_id, args.attempts, metadata_path)
+        tasks.append((puzzle_type, puzzle_id, args.attempts, metadata_path))
+
+    if not tasks:
+        print("No new puzzles to process.")
+        return
+
+    cpu_cores = os.cpu_count() or 1
+    workers = args.workers or min(len(tasks), cpu_cores)
+    workers = max(1, workers)
+
+    print(f"Starting mirrorVote.py in parallel: {len(tasks)} puzzle(s), {workers} worker(s)...")
+    with mp.Pool(processes=workers) as pool:
+        try:
+            for idx, done_id in enumerate(pool.imap_unordered(_run_vote_task, tasks), 1):
+                print(f"Completed voting for {done_id} ({idx}/{len(tasks)})")
+        finally:
+            pool.close()
+            pool.join()
 
     print("All puzzles processed.")
 

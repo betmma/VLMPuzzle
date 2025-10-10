@@ -18,8 +18,8 @@ DEFAULT_VOTE_ROOT = REPO_ROOT / "data" / "voteOutput"
 
 def main() -> None:
     vote_root = DEFAULT_VOTE_ROOT
-    processed_sudoku = summarize_sudoku_votes(vote_root)
-    summarize_monochrome_votes(vote_root, prefix_newline=processed_sudoku)
+    # processed_sudoku = summarize_sudoku_votes(vote_root)
+    # summarize_monochrome_votes(vote_root, prefix_newline=processed_sudoku)
     summarize_color_order_votes(vote_root)
 
 

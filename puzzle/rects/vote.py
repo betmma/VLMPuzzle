@@ -56,10 +56,11 @@ def summarize_color_order_votes(vote_root: Path) -> bool:
         print("No rects vote outputs found.")
         return False
 
-    total_vote_correct = 0
-    total_vote_positions = 0
-    total_attempt_correct = 0
-    total_attempt_positions = 0
+    # Strict metrics: a puzzle/attempt counts as correct only if ALL positions match.
+    total_vote_strict_correct = 0
+    total_vote_puzzles = 0
+    total_attempt_strict_correct = 0
+    total_attempts = 0
 
     for puzzle_dir in puzzle_dirs:
         attempts = sorted(
@@ -81,44 +82,57 @@ def summarize_color_order_votes(vote_root: Path) -> bool:
 
         for name, payload in payloads.items():
             predicted = payload.get("predicted", [])
-            correct = 0
-            total = len(positions)
+            # Tally predictions for downstream voted choice (ignore None).
             for i in positions:
                 choice = predicted[i] if i < len(predicted) else None
                 if choice is not None:
                     tallies[i][choice] += 1
-                if choice == expected[i]:
-                    correct += 1
-            rate = correct / total if total else 0.0
-            per_attempt_correct[name] = rate
-            total_attempt_correct += correct
-            total_attempt_positions += total
+            # Strict correctness: entire sequence matches exactly (length and content).
+            is_strict_correct = (
+                len(predicted) == len(expected)
+                and all(
+                    (predicted[i] if i < len(predicted) else None) == expected[i]
+                    for i in positions
+                )
+            )
+            per_attempt_correct[name] = 1.0 if is_strict_correct else 0.0
+            total_attempt_strict_correct += 1 if is_strict_correct else 0
+            total_attempts += 1
 
         vote_choice_seq: List[Optional[str]] = []
-        vote_correct = 0
         for i in positions:
             tally = tallies.get(i, Counter())
             choice = max(tally.items(), key=lambda kv: kv[1])[0] if tally else None
             vote_choice_seq.append(choice)
-            if choice == expected[i]:
-                vote_correct += 1
-        total_vote_correct += vote_correct
-        total_vote_positions += len(positions)
+        vote_all_correct = (
+            len(vote_choice_seq) == len(expected)
+            and all(vote_choice_seq[i] == expected[i] for i in positions)
+        )
+        total_vote_strict_correct += 1 if vote_all_correct else 0
+        total_vote_puzzles += 1
 
         print(f"Puzzle: {puzzle_dir.name}")
         print(f"  Positions: {len(positions)}")
-        print(f"  Vote correct rate: {vote_correct/len(positions):.0%}")
+        print(f"  Vote correct rate: {'100%' if vote_all_correct else '0%'}")
         print("  Individual correct rates:")
         for name in sorted(per_attempt_correct.keys()):
             print(f"    {name}: {per_attempt_correct[name]:.0%}")
         print()
 
-    if total_attempt_positions:
-        print("Overall attempt correct rate: {:.0%}".format(total_attempt_correct / total_attempt_positions))
+    if total_attempts:
+        print(
+            "Overall attempt correct rate: {:.0%}".format(
+                total_attempt_strict_correct / total_attempts
+            )
+        )
     else:
         print("Overall attempt correct rate: 0%")
-    if total_vote_positions:
-        print("Overall vote correct rate: {:.0%}".format(total_vote_correct / total_vote_positions))
+    if total_vote_puzzles:
+        print(
+            "Overall vote correct rate: {:.0%}".format(
+                total_vote_strict_correct / total_vote_puzzles
+            )
+        )
     else:
         print("Overall vote correct rate: 0%")
     return True
@@ -135,4 +149,3 @@ __all__ = [
     "summarize_color_order_votes",
     "RectsVoteSummarizer",
 ]
-

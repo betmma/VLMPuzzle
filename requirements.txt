@@ -3,3 +3,4 @@ Pillow
 requests
 pytesseract
 opencv-python
+openai-whisper
