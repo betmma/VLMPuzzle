@@ -14,6 +14,7 @@ GENERATOR_MODULES = {
     "maze": "puzzle.maze.generator",
     "mirror": "puzzle.mirror.generator",
     "sudoku": "puzzle.sudoku.generator",
+    "rects": "puzzle.rects.generator",
 }
 
 

@@ -21,7 +21,7 @@ API_KEY = 'api_key.txt'
 with open(API_KEY, 'r', encoding='utf-8') as f:
     API_KEY = f.read().split('\n')[0].strip()
 MODEL_NAME = 'sora_video2'#"veo3-frames"  # 使用的模型名称
-BASE_URL = 'https://jy.ai-wx.cn/v1' if MODEL_NAME=='sora_video2'else "https://api.sydney-ai.com/v1"  
+BASE_URL = 'https://jyapi.ai-wx.cn/v1' if MODEL_NAME=='sora_video2'else "https://api.sydney-ai.com/v1"  
 
 DEFAULT_INPUT_IMAGE = r"data/mirror/puzzles/c92274c1-deae-4f22-ab1a-ae5a8039694f_puzzle.png"
 DEFAULT_PROMPT = "Instantly reflect this pattern along the central, vertical axis while keeping the existing colored pattern without modification. Static camera perspective, no zoom or pan."

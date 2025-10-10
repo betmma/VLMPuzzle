@@ -76,7 +76,7 @@ class RectsGenerator(AbstractPuzzleGenerator[RectsPuzzleRecord]):
         prompt: str = (
             "Arrange these colored rectangles into exploded view, so that higher rectangle "
             "(covers others) appears closer to top of image, lower rectangle (covered by others) "
-            "appears closer to bottom of image."
+            "appears closer to bottom of image. In portrait."
         ),
         seed: Optional[int] = None,
     ) -> None:
@@ -167,8 +167,8 @@ class RectsGenerator(AbstractPuzzleGenerator[RectsPuzzleRecord]):
         W, H = self.canvas_dimensions
         colors = self._generate_colors(self.rect_count)
 
-        # Attempt multiple random layouts until the visible-boundary criteria holds
-        for _ in range(64):
+        # Attempt multiple random layouts until constraints hold
+        for _ in range(999999999999):
             # Choose a central anchor region that every rectangle will include to encourage
             # interactions; exact confirmation uses visible boundary segments (below).
             cx = W // 2
@@ -202,13 +202,40 @@ class RectsGenerator(AbstractPuzzleGenerator[RectsPuzzleRecord]):
             for idx, z in enumerate(z_perm):
                 rects[idx].z = z
 
+            # Enforce minimum separation between all parallel sides to avoid minuscule details
+            if not self._check_min_side_separation(rects, W, H):
+                continue
+
             if self._validate_visible_pairwise(rects, require_strong=self.require_strong_order):
                 return rects
 
         # Fallback: return last sampled layout even if criteria didn't meet to avoid hard failure
-        return rects
+        raise
 
     # --- Visible shared-boundary computation (user-specified algorithm) ------------
+
+    def _check_min_side_separation(self, rects: Sequence[RectSpec], W: int, H: int) -> bool:
+        # There are 2*rect_count vertical sides (x and x+w) and 2*rect_count horizontal sides (y and y+h)
+        # Require every pair among each group to differ by at least 1/(rect_count*5) of width/height
+        import math
+
+        n = max(1, len(rects))
+        min_dx = float(W) / (n * 5.0)
+        min_dy = float(H) / (n * 5.0)
+
+        xs: List[float] = []
+        ys: List[float] = []
+        for r in rects:
+            xs.extend([float(r.x), float(r.x + r.w)])
+            ys.extend([float(r.y), float(r.y + r.h)])
+
+        def _min_adjacent_diff(vals: List[float]) -> float:
+            if len(vals) < 2:
+                return float("inf")
+            vals_sorted = sorted(vals)
+            return min(vals_sorted[i + 1] - vals_sorted[i] for i in range(len(vals_sorted) - 1))
+
+        return _min_adjacent_diff(xs) >= min_dx and _min_adjacent_diff(ys) >= min_dy
 
     @staticmethod
     def _subtract_intervals(segments: List[Tuple[int, int]], cut: Tuple[int, int]) -> List[Tuple[int, int]]:
