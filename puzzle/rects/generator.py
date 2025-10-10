@@ -165,6 +165,7 @@ class RectsGenerator(AbstractPuzzleGenerator[RectsPuzzleRecord]):
 
     def _generate_rects(self) -> List[RectSpec]:
         W, H = self.canvas_dimensions
+        H//=3 # leave space for exploded view
         colors = self._generate_colors(self.rect_count)
 
         # Attempt multiple random layouts until constraints hold

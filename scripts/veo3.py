@@ -1,5 +1,6 @@
 # generate_video_output(input_image_path, prompt_text) -> output_directory_path
 # generate_video_output_multiple_tries(input_image_path, prompt_text, attempts=3) -> output_directory_path
+# generate_video_outputs_multiprocess(image_paths_list, prompt_texts, processes=None, attempts=1, chunksize=1) -> list of output_directory_path
 import os
 os.environ['NO_PROXY'] = '*'
 import base64

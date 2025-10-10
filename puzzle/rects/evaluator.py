@@ -117,14 +117,52 @@ class RectsEvaluator(AbstractPuzzleEvaluator):
         step = max(1, H // (len(palette) * 6))
         # Build palette as numpy array
         pal = np.array(palette, dtype=np.float32)
+        # Track which palette entries are still available to assign
+        available = np.ones(len(palette), dtype=bool) if len(palette) else np.array([], dtype=bool)
+        # Thresholds
+        assign_margin: float = 48.0           # max distance to accept a row match
+        used_pixel_margin: float = 48.0       # mask pixels near already-assigned colors
 
         row_assignments: List[int] = []  # index into palette for each sampled row
         for y in range(0, H, step):
             row = arr[y, :, :].astype(np.float32)
-            mean_rgb = row.mean(axis=0)
+            # Exclude near-white and near-black pixels from row color estimation
+            # Thresholds allow for minor compression noise around pure colors
+            is_white = np.all(row >= 240.0, axis=1)
+            is_black = np.all(row <= 15.0, axis=1)
+            mask = ~(is_white | is_black)
+
+            # Further exclude pixels whose color matches any already-assigned palette color
+            if pal.size and np.any(~available):
+                used_colors = pal[~available]
+                # Compute distance of each pixel to the set of used colors
+                diffs = row[:, None, :] - used_colors[None, :, :]
+                dists_used = np.linalg.norm(diffs, axis=2)
+                suppress = np.any(dists_used <= used_pixel_margin, axis=1)
+                mask = mask & (~suppress)
+
+            if np.any(mask):
+                filtered = row[mask]
+            else:
+                # If the row is only white/black or already-used colors, skip it
+                continue
+
+            mean_rgb = filtered.mean(axis=0)
+            if not pal.size or not np.any(available):
+                break
             dists = np.linalg.norm(pal - mean_rgb[None, :], axis=1)
-            nearest = int(np.argmin(dists)) if pal.size else -1
-            row_assignments.append(nearest)
+            # Exclude already seen colors by setting their distance to infinity
+            dists = np.where(available, dists, np.inf)
+            nearest = int(np.argmin(dists)) if np.any(available) else -1
+            if nearest >= 0:
+                min_dist = float(dists[nearest])
+                if np.isfinite(min_dist) and min_dist <= assign_margin:
+                    row_assignments.append(nearest)
+                    available[nearest] = False
+                    # Stop early if we've assigned all colors
+                    if not np.any(available):
+                        break
+                # Otherwise, distance too large: skip this row without assignment
 
         # Collapse consecutive duplicates and map to colors, keep unique sequentially
         order_idx: List[int] = []
@@ -168,4 +206,3 @@ def main(argv: Optional[List[str]] = None) -> None:
 
 if __name__ == "__main__":
     main()
-
