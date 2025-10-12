@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from veo3 import generate_video_output_multiple_tries
+from gpt5 import generate_multiple_tries
 
 def _load_puzzle(puzzles_path: str, puzzle_id: str) -> Dict[str, Any]:
     with open(puzzles_path, "r", encoding="utf-8") as handle:
@@ -66,6 +67,7 @@ def run_generations_for_puzzle(
     puzzle_id: str,
     attempts: int = 3,
     puzzles_path: str = "data/mirror/puzzles.json",
+    use_gpt_5: bool = False,
 ) -> List[Dict[str, Any]]:
     """Generate multiple video attempts for a mirror puzzle and evaluate each result."""
     puzzle = _load_puzzle(puzzles_path, puzzle_id)
@@ -82,10 +84,14 @@ def run_generations_for_puzzle(
 
     results: List[Dict[str, Any]] = []
     for attempt in range(1, attempts + 1):
-        output_dir = generate_video_output_multiple_tries(image_path, prompt)
-        result_png = os.path.join(output_dir, "result.png")
-        if not os.path.exists(result_png):
-            raise FileNotFoundError(f"Expected result frame not found at {result_png}")
+        if use_gpt_5:
+            output_dir = generate_multiple_tries(image_path, prompt)
+            result_png = os.path.join(output_dir, "result.png")
+        else:
+            output_dir = generate_video_output_multiple_tries(image_path, prompt)
+            result_png = os.path.join(output_dir, "result.png")
+            if not os.path.exists(result_png):
+                raise FileNotFoundError(f"Expected result frame not found at {result_png}")
 
         command = [
             sys.executable,
@@ -99,8 +105,11 @@ def run_generations_for_puzzle(
 
         attempt_dir = os.path.join(vote_run_dir, f"attempt_{attempt:02d}")
         os.makedirs(attempt_dir, exist_ok=True)
-        vote_result_png = os.path.join(attempt_dir, "result.png")
-        shutil.copy2(result_png, vote_result_png)
+        if use_gpt_5:
+            vote_result_png = os.path.join(attempt_dir, "result.png")
+        else:
+            vote_result_png = os.path.join(attempt_dir, "result.png")
+            shutil.copy2(result_png, vote_result_png)
 
         evaluation_record: Dict[str, Any] = {
             "attempt": attempt,
@@ -122,18 +131,20 @@ def run_generations_for_puzzle(
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python scripts/mirrorVote.py <puzzle_type> <puzzle_id> [attempts] [puzzles_path]")
+        print("Usage: python scripts/mirrorVote.py <puzzle_type> <puzzle_id> [attempts] [puzzles_path] [use_gpt_5]")
         sys.exit(1)
 
     PUZZLE_TYPE = sys.argv[1]
     puzzle_id_arg = sys.argv[2]
     attempts_arg = int(sys.argv[3]) if len(sys.argv) > 3 else 3
     puzzles_path_arg = sys.argv[4] if len(sys.argv) > 4 else f"data/{PUZZLE_TYPE}/puzzles.json"
+    use_gpt_5 = sys.argv[5].lower() == "true" if len(sys.argv) > 5 else False
 
     all_results = run_generations_for_puzzle(
         puzzle_id=puzzle_id_arg,
         attempts=attempts_arg,
         puzzles_path=puzzles_path_arg,
+        use_gpt_5=use_gpt_5
     )
 
     for result in all_results:

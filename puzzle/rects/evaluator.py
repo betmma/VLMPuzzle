@@ -129,9 +129,24 @@ class RectsEvaluator(AbstractPuzzleEvaluator):
     ) -> RectsEvaluationResult:
         record = self.get_record(puzzle_id)
         candidate_path = Path(candidate_image)
-        if not candidate_path.exists():
-            raise FileNotFoundError(f"Candidate image not found: {candidate_path}")
         attempt_dir = candidate_path.parent
+
+        candidate_pixels: Optional[np.ndarray] = None
+        text_response: Optional[str] = None
+        image_suffixes = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
+
+        if candidate_path.exists() and candidate_path.is_file():
+            if candidate_path.suffix.lower() in image_suffixes:
+                with Image.open(candidate_path) as img:
+                    candidate_pixels = np.asarray(img.convert("RGB"))
+            else:
+                text_response = candidate_path.read_text(encoding="utf-8")
+
+        if candidate_pixels is None and text_response is None:
+            text_path = attempt_dir / "content.txt"
+            if not text_path.exists() or not text_path.is_file():
+                raise FileNotFoundError(f"Candidate image and text both not found: {candidate_path}")
+            text_response = text_path.read_text(encoding="utf-8")
 
         rects = record.get("rectangles", [])
         # Order from top-most to bottom-most based on z
@@ -148,10 +163,13 @@ class RectsEvaluator(AbstractPuzzleEvaluator):
                 continue
         expected_order = [color for z, color in sorted(rect_entries, key=lambda t: t[0], reverse=True)]
 
-        with Image.open(candidate_path) as img:
-            cand = np.asarray(img.convert("RGB"))
+        if candidate_pixels is not None:
+            predicted_order = self._extract_order(candidate_pixels, expected_order)
+        else:
+            predicted_order = self._extract_order_from_text(text_response or "", expected_order)
 
-        predicted_order = self._extract_order(cand, expected_order)
+        if len(predicted_order) < len(expected_order):
+            predicted_order = predicted_order + [None] * (len(expected_order) - len(predicted_order))
 
         correct = 0
         breakdown: List[OrderPosition] = []
@@ -298,6 +316,28 @@ class RectsEvaluator(AbstractPuzzleEvaluator):
             if len(dedup_idx) >= len(palette):
                 break
         return [palette[i] if 0 <= i < len(palette) else None for i in dedup_idx]
+
+    def _extract_order_from_text(self, content: str, palette: Sequence[Color]) -> List[Optional[Color]]:
+        if not content:
+            return []
+        if '</think>' in content:
+            content=content.split('</think>')[-1]
+        names = self._extract_spoken_color_names(content)
+        if not names:
+            return []
+        seen: set[str] = set()
+        order: List[Optional[Color]] = []
+        for name in names:
+            if name in seen:
+                continue
+            color_tuple = CANONICAL_COLOR_TUPLES.get(name)
+            if color_tuple is None:
+                continue
+            order.append(color_tuple)
+            seen.add(name)
+            if len(order) >= len(palette):
+                break
+        return order
 
     # --- Speech + color-word helpers -------------------------------------------
 

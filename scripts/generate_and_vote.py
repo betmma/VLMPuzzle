@@ -95,7 +95,7 @@ def collect_new_records(
     return records[before_count : before_count + expected_new]
 
 
-def run_mirror_vote(puzzle_type: str, puzzle_id: str, attempts: int, puzzles_path: Path) -> None:
+def run_mirror_vote(puzzle_type: str, puzzle_id: str, attempts: int, puzzles_path: Path, use_gpt_5: bool) -> None:
     command = [
         sys.executable,
         "scripts/mirrorVote.py",
@@ -103,6 +103,7 @@ def run_mirror_vote(puzzle_type: str, puzzle_id: str, attempts: int, puzzles_pat
         puzzle_id,
         str(attempts),
         puzzles_path.as_posix(),
+        str(use_gpt_5)
     ]
     completed = subprocess.run(command)
     if completed.returncode != 0:
@@ -111,10 +112,10 @@ def run_mirror_vote(puzzle_type: str, puzzle_id: str, attempts: int, puzzles_pat
         )
 
 
-def _run_vote_task(params: Tuple[str, str, int, Path]) -> str:
-    puzzle_type, puzzle_id, attempts, puzzles_path = params
+def _run_vote_task(params: Tuple[str, str, int, Path, bool]) -> str:
+    puzzle_type, puzzle_id, attempts, puzzles_path, use_gpt_5 = params
     # Execute the vote run for a single puzzle and return its id on success.
-    run_mirror_vote(puzzle_type, puzzle_id, attempts, puzzles_path)
+    run_mirror_vote(puzzle_type, puzzle_id, attempts, puzzles_path, use_gpt_5)
     return puzzle_id
 
 
@@ -154,6 +155,11 @@ def main() -> None:
         default=None,
         help="Number of parallel worker processes for voting (default: min(count, CPU cores))",
     )
+    parser.add_argument(
+        "--use-gpt-5",
+        action="store_true",
+        help="Use gpt-5 instead of sora"
+    )
 
     args = parser.parse_args()
 
@@ -184,12 +190,12 @@ def main() -> None:
     print(f"Generated {len(new_records)} {puzzle_type} puzzle(s). Metadata recorded at {metadata_path}.")
 
     # Parallelize mirrorVote executions across generated puzzles.
-    tasks: List[Tuple[str, str, int, Path]] = []
+    tasks: List[Tuple[str, str, int, Path, bool]] = []
     for record in new_records:
         puzzle_id = record.get("id")
         if not puzzle_id:
             raise ValueError("Generated puzzle record missing 'id'")
-        tasks.append((puzzle_type, puzzle_id, args.attempts, metadata_path))
+        tasks.append((puzzle_type, puzzle_id, args.attempts, metadata_path, args.use_gpt_5))
 
     if not tasks:
         print("No new puzzles to process.")

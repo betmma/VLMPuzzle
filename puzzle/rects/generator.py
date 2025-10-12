@@ -387,6 +387,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--aspect", type=float, default=None, help="Canvas aspect ratio W/H")
     parser.add_argument("--weak", action="store_true", help="Allow weak (edge-touching) order evidence")
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--prompt",type=str, default=None)
     return parser.parse_args(argv)
 
 
@@ -399,6 +400,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         canvas_aspect_ratio=args.aspect,
         require_strong_order=not args.weak,
         seed=args.seed,
+        prompt=args.prompt
     )
     records = [gen.create_random_puzzle() for _ in range(max(1, args.count))]
     gen.write_metadata(records, Path(args.output_dir) / "puzzles.json")
