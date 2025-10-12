@@ -298,7 +298,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--base-url", dest="base_url", type=str, default=None, help="Override API base URL (or use OPENAI_BASE_URL)")
     # Local engine options
     p.add_argument("--whisper-model", dest="whisper_model", type=str, default="base", help="Local Whisper model size (tiny, base, small, medium, large)")
-    p.add_argument("--language", dest="language", type=str, default=None, help="Language hint for local Whisper (e.g., en, zh, etc.)")
+    p.add_argument("--language", dest="language", type=str, default="en", help="Language hint for local Whisper (e.g., en, zh, etc.)")
     p.add_argument("--output-json", dest="output_json", type=str, default=None, help="Write results to JSON file")
     p.add_argument("--nato-only", action="store_true", help="Print only the first NATO code word if present")
     return p

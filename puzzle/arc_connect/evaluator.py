@@ -88,7 +88,10 @@ class ArcConnectEvaluator(AbstractPuzzleEvaluator):
             else:
                 cmd.extend(["--engine", "local"])  # whisper
 
-            completed = subprocess.run([str(Path().resolve() / cmd[0])] + cmd[1:], capture_output=True, text=True)
+            # On Windows, invoke the Python interpreter explicitly for .py scripts
+            import sys as _sys
+            py_cmd = [_sys.executable, cmd[0]] + cmd[1:]
+            completed = subprocess.run(py_cmd, capture_output=True, text=True)
             if completed.returncode == 0:
                 try:
                     out_path = Path(completed.stdout.strip().splitlines()[-1].strip())
@@ -106,7 +109,9 @@ class ArcConnectEvaluator(AbstractPuzzleEvaluator):
                     video_path.as_posix(),
                     "--nato-only",
                 ]
-                completed2 = subprocess.run([str(Path().resolve() / cmd2[0])] + cmd2[1:], capture_output=True, text=True)
+                import sys as _sys
+                py_cmd2 = [_sys.executable, cmd2[0]] + cmd2[1:]
+                completed2 = subprocess.run(py_cmd2, capture_output=True, text=True)
                 if completed2.returncode == 0:
                     val = completed2.stdout.strip().upper()
                     if val:
@@ -153,4 +158,3 @@ def main(argv: Optional[List[str]] = None) -> None:
 
 if __name__ == "__main__":
     main()
-
