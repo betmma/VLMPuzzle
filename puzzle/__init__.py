@@ -31,6 +31,10 @@ __all__ = [
     "RayEvaluator",
     "RayPuzzleRecord",
     "RayEvaluationResult",
+    "ArcConnectGenerator",
+    "ArcConnectEvaluator",
+    "ArcConnectPuzzleRecord",
+    "ArcConnectEvaluationResult",
 ]
 
 from .base import AbstractPuzzleGenerator, AbstractPuzzleEvaluator
@@ -81,5 +85,13 @@ from .ray import (
     RayEvaluator,
     RayPuzzleRecord,
     RayEvaluationResult,
+)
+
+# Arc connection (speak option via NATO)
+from .arc_connect import (
+    ArcConnectGenerator,
+    ArcConnectEvaluator,
+    ArcConnectPuzzleRecord,
+    ArcConnectEvaluationResult,
 )
 

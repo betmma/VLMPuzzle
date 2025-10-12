@@ -11,6 +11,7 @@ from typing import Any, List, Sequence, Tuple
 # Utility script to batch-generate puzzles via CLI and then run mirrorVote.py on each.
 
 GENERATOR_MODULES = {
+    "arc_connect": "puzzle.arc_connect.generator",
     "arcagi": "puzzle.arcagi.generator",
     "jigsaw": "puzzle.jigsaw.generator",
     "maze": "puzzle.maze.generator",
