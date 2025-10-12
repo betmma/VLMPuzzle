@@ -110,7 +110,7 @@ class ArcConnectGenerator(AbstractPuzzleGenerator[ArcConnectPuzzleRecord]):
         self.arc_span_deg = max(2.0, min(90.0, float(arc_span_deg)))
 
         if prompt is None:
-            prompt = "One arc on the left continues across the masked band to one of the arcs on the right. Which labeled arc matches? Speak out the option in phonetic alphabet. In portrait."
+            prompt = "One arc on the left continues across the masked band to one of the arcs on the right. Which labeled arc matches? Remove the masked band quickly and speak out the option in phonetic alphabet. In portrait."
         self.prompt = prompt
 
         out = Path(self.output_dir)
@@ -349,8 +349,9 @@ class ArcConnectGenerator(AbstractPuzzleGenerator[ArcConnectPuzzleRecord]):
 
         # 3) Mask band edge lines to visualize the hidden middle
         edge_color = (200, 200, 200)
-        base_draw.line((mask_rect[0], 0, mask_rect[0], H), fill=edge_color, width=1)
-        base_draw.line((mask_rect[2], 0, mask_rect[2], H), fill=edge_color, width=1)
+        base_draw.rectangle(mask_rect, fill=(240, 240, 240))
+        base_draw.line((mask_rect[0], 0, mask_rect[0], H), fill=edge_color, width=5)
+        base_draw.line((mask_rect[2], 0, mask_rect[2], H), fill=edge_color, width=5)
 
         # 4) Labels at mask_right upper crossing points for each candidate (A–E top to bottom)
         try:

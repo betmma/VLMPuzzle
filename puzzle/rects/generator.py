@@ -74,7 +74,7 @@ class RectsGenerator(AbstractPuzzleGenerator[RectsPuzzleRecord]):
         canvas_aspect_ratio: Optional[float] = None,
         require_strong_order: bool = True,
         prompt: str = (
-            "Explode the colored rectangles vertically. The highest layer should be at the top of the image, and the lowest layer at the bottom. In portrait."
+            "Explode the colored rectangles vertically. The highest layer should be at the top of the image, and the lowest layer at the bottom. Then speak out the colors of rectangles (blue, green, purple and red) in layer order, from top to bottom. In portrait."
         ),
         seed: Optional[int] = None,
     ) -> None:

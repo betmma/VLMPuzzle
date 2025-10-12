@@ -115,6 +115,25 @@ python -m puzzle.mirror.evaluator data/mirror/puzzles.json <PUZZLE_ID> candidate
 
 Each right-half cell is compared against its mirrored counterpart by averaging RGB values and measuring color distance.
 
+## Generating rectangles stacking puzzles
+
+```
+python -m puzzle.rects.generator 5 --output-dir data/rects --rect-count 4 --canvas-size 512
+```
+
+Every record stores overlapping rectangles with a defined z-order along with a prompt instructing models to explode the stack vertically and speak the color order (blue, green, purple, red) from top to bottom.
+
+## Evaluating rectangles answers
+
+```
+python -m puzzle.rects.evaluator data/rects/puzzles.json <PUZZLE_ID> attempt/final.png --speech-mode auto --speech-engine local --whisper-model base
+```
+
+- The evaluator still scores the visual ordering by extracting the dominant color per band and comparing it to metadata.
+- When audio or video is present in the same attempt directory (or provided via `--speech-media`), the evaluator transcribes the spoken response and records the color words in sequence.
+- Speech transcription works with either local Whisper (`--speech-engine local`) or an API endpoint (`--speech-engine api --speech-model whisper-1 --speech-base-url ...`).
+- Evaluation results now include both the RGB order and the spoken color names so voting scripts can fall back to the audio transcript when images are missing.
+
 ## Notes
 
 - Sudoku OCR relies on Tesseract via `pytesseract`; install the Tesseract binary and ensure it is available on PATH.

@@ -4,3 +4,4 @@ requests
 pytesseract
 opencv-python
 openai-whisper
+openai

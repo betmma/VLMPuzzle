@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from puzzle.base import EvaluationPayloadReader, AbstractVoteSummarizer
 
+VOTE_SPOKEN=True
+
 
 Color = Tuple[int, int, int]
 
@@ -30,6 +32,7 @@ def load_attempt(attempt_dir: Path) -> Optional[Dict[str, Any]]:
         return None
     expected = inner.get("expected_order") or []
     predicted = inner.get("predicted_order") or []
+    spoken_rgb = inner.get("spoken_color_rgb") or []
     expected_keys: List[str] = []
     for c in expected:
         key = _color_key(c)
@@ -39,12 +42,20 @@ def load_attempt(attempt_dir: Path) -> Optional[Dict[str, Any]]:
     for c in predicted:
         key = _color_key(c)
         predicted_keys.append(key)
+    spoken_keys: List[Optional[str]] = []
+    for c in spoken_rgb:
+        key = _color_key(c)
+        spoken_keys.append(key)
     if not expected_keys:
         return None
+    effective_predicted = predicted_keys
+    if not any(effective_predicted) and any(spoken_keys):
+        effective_predicted = spoken_keys
     return {
         "puzzle_id": inner.get("puzzle_id"),
         "expected": expected_keys,
-        "predicted": predicted_keys,
+        "predicted": effective_predicted,
+        "spoken": spoken_keys,
     }
 
 
@@ -81,7 +92,7 @@ def summarize_color_order_votes(vote_root: Path) -> bool:
         per_attempt_correct: Dict[str, float] = {}
 
         for name, payload in payloads.items():
-            predicted = payload.get("predicted", [])
+            predicted = payload.get("spoken" if VOTE_SPOKEN else "predicted", [])
             # Tally predictions for downstream voted choice (ignore None).
             for i in positions:
                 choice = predicted[i] if i < len(predicted) else None
@@ -118,7 +129,7 @@ def summarize_color_order_votes(vote_root: Path) -> bool:
         for name in sorted(per_attempt_correct.keys()):
             print(f"    {name}: {per_attempt_correct[name]:.0%}")
         print()
-
+    print("Total attempts:", total_attempts)
     if total_attempts:
         print(
             "Overall attempt correct rate: {:.0%}".format(
