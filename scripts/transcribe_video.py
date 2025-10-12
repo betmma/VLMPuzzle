@@ -96,13 +96,13 @@ def extract_first_nato_word(text: str) -> Optional[str]:
 
     # Build a single regex from the word list with word boundaries.
     # Use alternation ordered as in _NATO_WORDS so variants keep priority.
-    pattern = r"\\b(?:(%s))\\b" % ("|".join(map(re.escape, _NATO_WORDS)))
+    pattern = r"\b(?:(%s))\b" % ("|".join(map(re.escape, _NATO_WORDS)))
     regex = re.compile(pattern, flags=re.IGNORECASE)
-    match = regex.search(text)
+    match = regex.findall(text)
     if not match:
         return None
     # Normalize to the canonical upper-case variant from the list
-    found = match.group(1)
+    found = match[0]
     found_upper = found.upper()
     return found_upper[0]
 

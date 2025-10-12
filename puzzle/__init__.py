@@ -27,6 +27,10 @@ __all__ = [
     "MazeEvaluationResult",
     "PieceEvaluation",
     "CellEvaluation",
+    "RayGenerator",
+    "RayEvaluator",
+    "RayPuzzleRecord",
+    "RayEvaluationResult",
 ]
 
 from .base import AbstractPuzzleGenerator, AbstractPuzzleEvaluator
@@ -69,5 +73,13 @@ from .rects import (
     RectsEvaluator,
     RectsPuzzleRecord,
     RectsEvaluationResult,
+)
+
+# Ray-and-mirrors (speak option via NATO)
+from .ray import (
+    RayGenerator,
+    RayEvaluator,
+    RayPuzzleRecord,
+    RayEvaluationResult,
 )
 
