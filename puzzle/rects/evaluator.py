@@ -20,10 +20,14 @@ Color = Tuple[int, int, int]
 
 
 CANONICAL_COLOR_TUPLES: Dict[str, Color] = {
-    "blue": (68, 229, 229),
-    "green": (149, 229, 68),
-    "purple": (149, 68, 229),
     "red": (229, 68, 68),
+    "orange": (229, 149, 68),
+    "yellow": (229, 229, 68),
+    "green": (149, 229, 68),
+    "teal": (68, 229, 195),
+    "blue": (68, 149, 229),
+    "purple": (149, 68, 229),
+    "magenta": (229, 68, 195),
 }
 
 CANONICAL_COLOR_VECTORS: Dict[str, np.ndarray] = {
@@ -31,19 +35,28 @@ CANONICAL_COLOR_VECTORS: Dict[str, np.ndarray] = {
 }
 
 COLOR_SYNONYMS: Dict[str, str] = {
-    "blue": "blue",
-    "cyan": "blue",
-    "teal": "blue",
-    "turquoise": "blue",
-    "green": "green",
-    "lime": "green",
-    "emerald": "green",
-    "purple": "purple",
-    "violet": "purple",
-    "magenta": "purple",
     "red": "red",
     "crimson": "red",
     "scarlet": "red",
+    "orange": "orange",
+    "amber": "orange",
+    "yellow": "yellow",
+    "gold": "yellow",
+    "green": "green",
+    "lime": "green",
+    "emerald": "green",
+    "teal": "teal",
+    "cyan": "teal",
+    "turquoise": "teal",
+    "aqua": "teal",
+    "blue": "blue",
+    "navy": "blue",
+    "azure": "blue",
+    "purple": "purple",
+    "violet": "purple",
+    "magenta": "magenta",
+    "fuchsia": "magenta",
+    "pink": "magenta",
 }
 
 VIDEO_GLOBS: Tuple[str, ...] = ("video_*.mp4", "video_*.webm", "video_*.mov", "*.mp4", "*.webm", "*.mov", "*.mkv")
@@ -148,9 +161,27 @@ class RectsEvaluator(AbstractPuzzleEvaluator):
                 raise FileNotFoundError(f"Candidate image and text both not found: {candidate_path}")
             text_response = text_path.read_text(encoding="utf-8")
 
+        palette_map: Dict[str, Color] = {}
+        palette_entries = record.get("color_palette", [])
+        if isinstance(palette_entries, list):
+            for entry in palette_entries:
+                if not isinstance(entry, dict):
+                    continue
+                name_raw = entry.get("name")
+                color_list = entry.get("color")
+                if not isinstance(name_raw, str):
+                    continue
+                if not (isinstance(color_list, (list, tuple)) and len(color_list) == 3):
+                    continue
+                normalized = name_raw.strip().lower()
+                try:
+                    color_tuple = (int(color_list[0]), int(color_list[1]), int(color_list[2]))
+                except (TypeError, ValueError):
+                    continue
+                palette_map[normalized] = color_tuple
+
         rects = record.get("rectangles", [])
-        # Order from top-most to bottom-most based on z
-        rect_entries: List[Tuple[int, Color]] = []
+        rect_entries: List[Tuple[int, Color, Optional[str]]] = []
         for r in rects:
             try:
                 z = int(r.get("z"))
@@ -158,15 +189,43 @@ class RectsEvaluator(AbstractPuzzleEvaluator):
                 if not (isinstance(color_list, (list, tuple)) and len(color_list) == 3):
                     continue
                 color = (int(color_list[0]), int(color_list[1]), int(color_list[2]))
-                rect_entries.append((z, color))
+                name_raw = r.get("color_name")
+                normalized_name: Optional[str] = None
+                if isinstance(name_raw, str):
+                    normalized_name = name_raw.strip().lower() or None
+                if normalized_name is not None and normalized_name not in palette_map:
+                    palette_map[normalized_name] = color
+                rect_entries.append((z, color, normalized_name))
             except Exception:
                 continue
-        expected_order = [color for z, color in sorted(rect_entries, key=lambda t: t[0], reverse=True)]
+
+        if not palette_map:
+            palette_map = dict(CANONICAL_COLOR_TUPLES)
+
+        sorted_entries = sorted(rect_entries, key=lambda t: t[0], reverse=True)
+        expected_order = [color for _, color, _ in sorted_entries]
+
+        palette_vectors: Dict[str, np.ndarray] = {
+            name: np.array(rgb, dtype=np.float32) for name, rgb in palette_map.items()
+        }
+
+        def nearest_palette_name(color: Optional[Color]) -> Optional[str]:
+            if color is None or not palette_vectors:
+                return None
+            vec = np.array(color, dtype=np.float32)
+            best_name: Optional[str] = None
+            best_dist: Optional[float] = None
+            for name, target in palette_vectors.items():
+                dist = float(np.linalg.norm(vec - target))
+                if best_dist is None or dist < best_dist:
+                    best_dist = dist
+                    best_name = name
+            return best_name
 
         if candidate_pixels is not None:
             predicted_order = self._extract_order(candidate_pixels, expected_order)
         else:
-            predicted_order = self._extract_order_from_text(text_response or "", expected_order)
+            predicted_order = self._extract_order_from_text(text_response or "", expected_order, palette_map)
 
         if len(predicted_order) < len(expected_order):
             predicted_order = predicted_order + [None] * (len(expected_order) - len(predicted_order))
@@ -182,8 +241,14 @@ class RectsEvaluator(AbstractPuzzleEvaluator):
             if is_correct:
                 correct += 1
 
-        expected_names: List[Optional[str]] = [self._color_to_name(color) for color in expected_order]
-        predicted_names: List[Optional[str]] = [self._color_to_name(color) if color else None for color in predicted_order]
+        expected_names: List[Optional[str]] = []
+        for idx, (_, _, color_name) in enumerate(sorted_entries):
+            if color_name is not None:
+                expected_names.append(color_name)
+            else:
+                expected_names.append(nearest_palette_name(expected_order[idx]))
+
+        predicted_names: List[Optional[str]] = [nearest_palette_name(color) if color else None for color in predicted_order]
 
         speech_media_path = Path(speech_media) if speech_media is not None else None
         speech_source_path = self._resolve_speech_source(attempt_dir, speech_media_path, mode=speech_mode)
@@ -203,9 +268,17 @@ class RectsEvaluator(AbstractPuzzleEvaluator):
                 language=speech_language,
             )
             if transcription is not None:
-                speech_transcript, spoken_names, spoken_rgb, transcript_path = transcription
+                speech_transcript, raw_spoken_names, _spoken_rgb, transcript_path = transcription
                 speech_engine_used = speech_engine
                 speech_json_path = transcript_path.as_posix()
+                filtered_names: List[str] = []
+                filtered_rgb: List[Color] = []
+                for name in raw_spoken_names:
+                    if name in palette_map:
+                        filtered_names.append(name)
+                        filtered_rgb.append(palette_map[name])
+                spoken_names = filtered_names
+                spoken_rgb = filtered_rgb
 
         expected_valid_sequence = [name for name in expected_names if name is not None]
         spoken_correct = 0
@@ -317,7 +390,12 @@ class RectsEvaluator(AbstractPuzzleEvaluator):
                 break
         return [palette[i] if 0 <= i < len(palette) else None for i in dedup_idx]
 
-    def _extract_order_from_text(self, content: str, palette: Sequence[Color]) -> List[Optional[Color]]:
+    def _extract_order_from_text(
+        self,
+        content: str,
+        palette: Sequence[Color],
+        name_to_color: Dict[str, Color],
+    ) -> List[Optional[Color]]:
         if not content:
             return []
         if '</think>' in content:
@@ -330,7 +408,7 @@ class RectsEvaluator(AbstractPuzzleEvaluator):
         for name in names:
             if name in seen:
                 continue
-            color_tuple = CANONICAL_COLOR_TUPLES.get(name)
+            color_tuple = name_to_color.get(name)
             if color_tuple is None:
                 continue
             order.append(color_tuple)
