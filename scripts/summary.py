@@ -12,11 +12,15 @@ if str(REPO_ROOT) not in sys.path:
 from puzzle.sudoku.vote import summarize_votes as summarize_sudoku_votes
 from puzzle.mirror.vote import summarize_monochrome_votes
 from puzzle.rects.vote import summarize_color_order_votes
+from scripts import multiple_choice_summary as mc_summary
 
 DEFAULT_VOTE_ROOT = REPO_ROOT / "data" / "voteOutput"
+DEFAULT_OUTPUT_ROOT = REPO_ROOT / "data" / "output"
 
 
 def main() -> None:
+    output_root = DEFAULT_OUTPUT_ROOT
+    mc_summary.summarize_multiple_choice_attempts(output_root, top_misses=5)
     vote_root = DEFAULT_VOTE_ROOT
     # processed_sudoku = summarize_sudoku_votes(vote_root)
     # summarize_monochrome_votes(vote_root, prefix_newline=processed_sudoku)

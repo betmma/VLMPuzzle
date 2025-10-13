@@ -13,6 +13,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
+import re
 
 from ..base import AbstractPuzzleEvaluator, PathLike
 
@@ -57,9 +58,12 @@ class ArcConnectEvaluator(AbstractPuzzleEvaluator):
             raise ValueError("Puzzle record missing valid 'correct_option' (A–E)")
 
         candidate_path = Path(candidate_image)
-        if not candidate_path.exists():
-            raise FileNotFoundError(f"Candidate image not found: {candidate_path}")
         attempt_dir = candidate_path.parent
+        
+        text_path = attempt_dir / "content.txt"
+        if not text_path.exists() or not text_path.is_file():
+            raise FileNotFoundError(f"Text not found: {text_path}")
+        text_response = text_path.read_text(encoding="utf-8")
 
         video_path: Optional[Path] = None
         for pattern in self.VIDEO_GLOBS:
@@ -116,6 +120,9 @@ class ArcConnectEvaluator(AbstractPuzzleEvaluator):
                     val = completed2.stdout.strip().upper()
                     if val:
                         predicted = val[0]
+        else:
+            options = re.findall(r'\b([A-E])\b', text_response.upper())
+            predicted = options[-1] if options else None
 
         is_correct = (predicted == correct) if predicted else False
         return ArcConnectEvaluationResult(

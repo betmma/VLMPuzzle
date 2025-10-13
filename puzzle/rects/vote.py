@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from puzzle.base import EvaluationPayloadReader, AbstractVoteSummarizer
 
-VOTE_SPOKEN=False
+VOTE_SPOKEN=True
 
 
 Color = Tuple[int, int, int]
