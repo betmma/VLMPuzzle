@@ -22,9 +22,9 @@ class AbstractPuzzleGenerator(ABC, Generic[RecordT]):
     def create_puzzle(self, *args, **kwargs) -> RecordT:
         """Create a puzzle from the provided resources."""
 
-    @abstractmethod
     def create_random_puzzle(self) -> RecordT:
         """Create a single randomized puzzle instance."""
+        return self.create_puzzle()
 
     def generate_dataset(
         self,

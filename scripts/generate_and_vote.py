@@ -13,6 +13,7 @@ from typing import Any, List, Sequence, Tuple
 GENERATOR_MODULES = {
     "arc_connect": "puzzle.arc_connect.generator",
     "arcagi": "puzzle.arcagi.generator",
+    "circle_count": "puzzle.circle_count.generator",
     "jigsaw": "puzzle.jigsaw.generator",
     "maze": "puzzle.maze.generator",
     "mirror": "puzzle.mirror.generator",

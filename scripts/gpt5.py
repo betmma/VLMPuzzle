@@ -1,7 +1,7 @@
 from veo3 import call_api_raw,prepare_image_data,create_output_directory,API_KEY,BASE_URL,API_TIMEOUT,USE_STREAM,call_openai_with_retry,client,save_mixed_content
-import os,time
+import os,time,json
 
-MODEL_NAME = "gpt-5-high"
+MODEL_NAME = "gemini-2.5-pro"
 
 def generate(input_image_path, prompt_text)->str:
     """use gpt-5 to process images with prompt_text, return response content and output directory"""
@@ -77,6 +77,8 @@ def generate(input_image_path, prompt_text)->str:
         response_content = completion.choices[0].message.content
     with open(output_directory+'/input.txt','w') as file:
         file.write(f'Model name:\n{MODEL_NAME}\nInput image path:\n{input_image_path}\nPrompt:\n{prompt_text}')
+        messages_text = json.dumps(messages, indent=2, ensure_ascii=False)
+        file.write(f'\n\nMessages:\n{messages_text}')
     save_mixed_content(response_content, output_directory)
     return output_directory
 

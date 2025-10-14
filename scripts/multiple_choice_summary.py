@@ -17,7 +17,6 @@ from typing import Dict, Iterable, List, Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_VOTE_OUTPUT_ROOT = REPO_ROOT / "data" / "voteOutput"
-VALID_OPTIONS = ("A", "B", "C", "D", "E")
 
 
 @dataclass(frozen=True)
@@ -54,9 +53,7 @@ def _normalize_option(raw: Optional[object]) -> Optional[str]:
     if raw is None:
         return None
     text = str(raw).strip().upper()
-    if text and text[0] in VALID_OPTIONS:
-        return text[0]
-    return None
+    return text
 
 
 def _parse_attempt(evaluation_path: Path) -> Optional[AttemptRecord]:
@@ -126,28 +123,28 @@ def _group_by_type(records: Iterable[AttemptRecord]) -> Dict[str, List[AttemptRe
 
 
 def _print_option_breakdown(records: Iterable[AttemptRecord]) -> None:
-    total_per_option: Dict[str, int] = {option: 0 for option in VALID_OPTIONS}
-    correct_per_option: Dict[str, int] = {option: 0 for option in VALID_OPTIONS}
+    total_per_option: Dict[str, int] = {}
+    correct_per_option: Dict[str, int] = {}
     predicted_counter: Counter[str] = Counter()
     predicted_none = 0
 
     for record in records:
-        total_per_option[record.correct_option] += 1
+        total_per_option[record.correct_option] = total_per_option.get(record.correct_option, 0) + 1
         if record.is_correct:
-            correct_per_option[record.correct_option] += 1
+            correct_per_option[record.correct_option] = correct_per_option.get(record.correct_option, 0) + 1
         if record.predicted_option is None:
             predicted_none += 1
         else:
             predicted_counter[record.predicted_option] += 1
 
     print("Option accuracy (by correct answer):")
-    for option in VALID_OPTIONS:
+    for option in sorted(total_per_option.keys()):
         total = total_per_option[option]
-        correct = correct_per_option[option]
+        correct = correct_per_option.get(option, 0)
         rate = (correct / total) if total else 0.0
         print(f"  {option}: {correct}/{total} correct ({rate:.0%})")
     print("Predicted option distribution:")
-    for option in VALID_OPTIONS:
+    for option in sorted(predicted_counter.keys()):
         print(f"  {option}: {predicted_counter.get(option, 0)}")
     if predicted_none:
         print(f"  (unrecognized): {predicted_none}")

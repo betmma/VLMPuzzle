@@ -35,6 +35,10 @@ __all__ = [
     "ArcConnectEvaluator",
     "ArcConnectPuzzleRecord",
     "ArcConnectEvaluationResult",
+    "CircleCountGenerator",
+    "CircleCountEvaluator",
+    "CircleCountPuzzleRecord",
+    "CircleCountEvaluationResult",
 ]
 
 from .base import AbstractPuzzleGenerator, AbstractPuzzleEvaluator
@@ -93,5 +97,12 @@ from .arc_connect import (
     ArcConnectEvaluator,
     ArcConnectPuzzleRecord,
     ArcConnectEvaluationResult,
+)
+
+from .circle_count import (
+    CircleCountGenerator,
+    CircleCountEvaluator,
+    CircleCountPuzzleRecord,
+    CircleCountEvaluationResult,
 )
 
