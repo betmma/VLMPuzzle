@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar, Union
+from scripts.transcribe_video import extract_first_nato_word
+from dataclasses import dataclass
 
 PathLike = Union[str, Path]
 RecordT = TypeVar("RecordT")
@@ -77,6 +81,25 @@ class AbstractPuzzleGenerator(ABC, Generic[RecordT]):
 
 class AbstractPuzzleEvaluator(ABC):
     """Base class scaffolding for puzzle evaluators."""
+    
+    @dataclass
+    class OptionEvaluationResult:
+        puzzle_id: str
+        correct_option: str
+        transcribe_option: Optional[str]
+        image_option: Optional[str]
+        text_option: Optional[str]
+        attempt_dir: str
+        
+        def to_dict(self) -> Dict[str, Optional[object]]:
+            return {
+                "puzzle_id": self.puzzle_id,
+                "correct_option": self.correct_option,
+                "transcribe_option": self.transcribe_option,
+                "image_option": self.image_option,
+                "text_option": self.text_option,
+                "attempt_dir": self.attempt_dir,
+            }
 
     def __init__(
         self,
@@ -260,6 +283,59 @@ class AbstractPuzzleEvaluator(ABC):
             target_size=target_size,
             margin_px=margin_px,
         )
+        
+    @staticmethod
+    def transcribe_video(
+        attempt_dir: PathLike,
+        engine: str = "local",
+        model: str = "whisper-1",
+        base_url: Optional[str] = None,
+        whisper_model: str = "base",
+        script_path: Optional[PathLike] = None,
+    ) -> Dict[str, Any]:
+        """Run the shared transcription script and return the raw JSON payload string when available."""
+
+        out_dir = Path(attempt_dir)
+        video = out_dir / "video_1.mp4"
+        if not video.exists() or not video.is_file():
+            return {}
+        script = Path(script_path) if script_path is not None else Path.cwd() / "scripts" / "transcribe_video.py"
+        json_out = out_dir / "transcription.json"
+
+        cmd: List[str] = [
+            sys.executable,
+            script.as_posix(),
+            video.as_posix(),
+            "--output-json",
+            json_out.as_posix(),
+        ]
+        if engine == "api":
+            cmd.extend(["--engine", "api", "--model", model])
+            if base_url:
+                cmd.extend(["--base-url", base_url])
+        else:
+            cmd.extend(["--engine", "local", "--whisper-model", whisper_model])
+
+        completed = subprocess.run(cmd, capture_output=True, text=True)
+        with open(json_out, "r", encoding="utf-8") as f:
+            stdout_stripped = f.read().strip()
+            return json.loads(stdout_stripped)
+    
+    @staticmethod
+    def extract_first_nato_word(
+        transcript: str
+    ) -> Optional[str]:
+        """Extract the first NATO code word from a transcript string."""
+        nato=extract_first_nato_word(transcript)
+        if nato:
+            return nato
+        remove_chars = '.,!?;:"\'()[]{}<>*/'
+        
+        for word in transcript.split()[::-1]:
+            word = word.strip(remove_chars)
+            if word in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
+                return word
+        return None
 
 
 class EvaluationPayloadReader:
@@ -316,4 +392,5 @@ __all__ = [
     "EvaluationPayloadReader",
     "AbstractVoteSummarizer",
     "PathLike",
+    "transcribe_video",
 ]

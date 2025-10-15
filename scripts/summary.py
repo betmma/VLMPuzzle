@@ -21,7 +21,7 @@ DEFAULT_OUTPUT_ROOT = REPO_ROOT / "data" / "output"
 def main() -> None:
     output_root = DEFAULT_OUTPUT_ROOT
     vote_root = DEFAULT_VOTE_ROOT
-    mc_summary.summarize_multiple_choice_attempts(vote_root, top_misses=5)
+    mc_summary.summarize_all(vote_root, top_misses=5)
     # processed_sudoku = summarize_sudoku_votes(vote_root)
     # summarize_monochrome_votes(vote_root, prefix_newline=processed_sudoku)
     # summarize_color_order_votes(vote_root)

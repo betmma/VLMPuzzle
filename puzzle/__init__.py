@@ -31,6 +31,10 @@ __all__ = [
     "RayEvaluator",
     "RayPuzzleRecord",
     "RayEvaluationResult",
+    "RayIntersectionGenerator",
+    "RayIntersectionEvaluator",
+    "RayIntersectionPuzzleRecord",
+    "RayIntersectionEvaluationResult",
     "ArcConnectGenerator",
     "ArcConnectEvaluator",
     "ArcConnectPuzzleRecord",
@@ -39,9 +43,10 @@ __all__ = [
     "CircleCountEvaluator",
     "CircleCountPuzzleRecord",
     "CircleCountEvaluationResult",
+    "transcribe_video",
 ]
 
-from .base import AbstractPuzzleGenerator, AbstractPuzzleEvaluator
+from .base import AbstractPuzzleEvaluator, AbstractPuzzleGenerator
 from .jigsaw import (
     JigsawGenerator,
     JigsawEvaluator,
@@ -89,6 +94,11 @@ from .ray import (
     RayEvaluator,
     RayPuzzleRecord,
     RayEvaluationResult,
+)
+
+from .ray_intersection import (
+    RayIntersectionGenerator,
+    RayIntersectionEvaluator,
 )
 
 # Arc connection (speak option via NATO)

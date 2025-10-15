@@ -18,6 +18,7 @@ from typing import Dict, Iterable, List, Optional
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_VOTE_OUTPUT_ROOT = REPO_ROOT / "data" / "voteOutput"
 
+KEYS=['predicted_option','transcribe_option','image_option','text_option']
 
 @dataclass(frozen=True)
 class AttemptRecord:
@@ -56,7 +57,7 @@ def _normalize_option(raw: Optional[object]) -> Optional[str]:
     return text
 
 
-def _parse_attempt(evaluation_path: Path) -> Optional[AttemptRecord]:
+def _parse_attempt(evaluation_path: Path, key:str) -> Optional[AttemptRecord]:
     payload = json.loads(evaluation_path.read_text(encoding="utf-8"))
     stdout_blob = payload.get("stdout")
     if not stdout_blob:
@@ -64,8 +65,8 @@ def _parse_attempt(evaluation_path: Path) -> Optional[AttemptRecord]:
     inner = json.loads(stdout_blob)
     puzzle_id = str(inner.get("puzzle_id") or "").strip()
     correct_option = _normalize_option(inner.get("correct_option"))
-    predicted_option = _normalize_option(inner.get("predicted_option"))
-    is_correct = bool(inner.get("is_correct"))
+    predicted_option = _normalize_option(inner.get(key))
+    is_correct = correct_option == predicted_option
     if not puzzle_id or correct_option is None:
         return None
     attempt_index = _coerce_attempt_index(payload.get("attempt"))
@@ -81,7 +82,7 @@ def _parse_attempt(evaluation_path: Path) -> Optional[AttemptRecord]:
     )
 
 
-def _iter_attempts(vote_root: Path) -> Iterable[AttemptRecord]:
+def _iter_attempts(vote_root: Path, key:str) -> Iterable[AttemptRecord]:
     if not vote_root.exists() or not vote_root.is_dir():
         return []
     attempts: List[AttemptRecord] = []
@@ -94,7 +95,7 @@ def _iter_attempts(vote_root: Path) -> Iterable[AttemptRecord]:
                 continue
             evaluation_path = attempt_dir / "evaluation.json"
             if evaluation_path.exists() and evaluation_path.is_file():
-                record = _parse_attempt(evaluation_path)
+                record = _parse_attempt(evaluation_path,key)
                 if record is not None:
                     attempts.append(record)
                     nested_attempts = True
@@ -102,7 +103,7 @@ def _iter_attempts(vote_root: Path) -> Iterable[AttemptRecord]:
             continue
         evaluation_path = vote_run / "evaluation.json"
         if evaluation_path.exists() and evaluation_path.is_file():
-            record = _parse_attempt(evaluation_path)
+            record = _parse_attempt(evaluation_path,key)
             if record is not None:
                 attempts.append(record)
     return attempts
@@ -181,8 +182,8 @@ def _summarize_types(records: Iterable[AttemptRecord]) -> None:
     print()
 
 
-def summarize_multiple_choice_attempts(vote_root: Path, *, top_misses: int) -> bool:
-    attempts = list(_iter_attempts(vote_root))
+def summarize_multiple_choice_attempts(vote_root: Path, key: str, top_misses: int) -> bool:
+    attempts = list(_iter_attempts(vote_root,key))
     if not attempts:
         print(f"No multiple-choice evaluations found under {vote_root.as_posix()}.")
         return False
@@ -222,11 +223,20 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     return parser
 
+def summarize_all(vote_root: Path, top_misses: int) -> bool:
+    any_found = False
+    for key in KEYS:
+        print(f"Summary for key: {key}")
+        found = summarize_multiple_choice_attempts(vote_root, key=key, top_misses=max(0, top_misses))
+        any_found = any_found or found
+    return any_found
 
 def main() -> None:
     parser = _build_arg_parser()
     args = parser.parse_args()
-    summarize_multiple_choice_attempts(args.output_root, top_misses=max(0, args.top_misses))
+    for key in KEYS:
+        print(f"Summary for key: {key}")
+        summarize_multiple_choice_attempts(args.output_root, key=key, top_misses=max(0, args.top_misses))
 
 
 if __name__ == "__main__":

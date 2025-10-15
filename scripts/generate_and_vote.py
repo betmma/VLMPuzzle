@@ -20,6 +20,7 @@ GENERATOR_MODULES = {
     "sudoku": "puzzle.sudoku.generator",
     "rects": "puzzle.rects.generator",
     "ray": "puzzle.ray.generator",
+    "ray_intersection": "puzzle.ray_intersection.generator",
 }
 
 

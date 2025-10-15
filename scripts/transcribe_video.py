@@ -300,7 +300,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--whisper-model", dest="whisper_model", type=str, default="base", help="Local Whisper model size (tiny, base, small, medium, large)")
     p.add_argument("--language", dest="language", type=str, default="en", help="Language hint for local Whisper (e.g., en, zh, etc.)")
     p.add_argument("--output-json", dest="output_json", type=str, default=None, help="Write results to JSON file")
-    p.add_argument("--nato-only", action="store_true", help="Print only the first NATO code word if present")
     return p
 
 
@@ -324,13 +323,6 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     except Exception as exc:
         print(f"Error: {exc}")
         return 2
-
-    if args.nato_only:
-        if result.first_nato_word:
-            print(result.first_nato_word)
-            return 0
-        print("")  # explicit empty line when none found
-        return 1
 
     payload = result.to_dict()
 

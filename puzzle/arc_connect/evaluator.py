@@ -96,30 +96,13 @@ class ArcConnectEvaluator(AbstractPuzzleEvaluator):
             import sys as _sys
             py_cmd = [_sys.executable, cmd[0]] + cmd[1:]
             completed = subprocess.run(py_cmd, capture_output=True, text=True)
-            if completed.returncode == 0:
-                try:
-                    out_path = Path(completed.stdout.strip().splitlines()[-1].strip())
-                    if out_path.exists():
-                        transcript_json_path = out_path
-                        payload = json.loads(out_path.read_text(encoding="utf-8"))
-                        nato_word = payload.get("first_nato_word")
-                        if isinstance(nato_word, str) and nato_word:
-                            predicted = nato_word.strip().upper()[0]
-                except Exception:
-                    pass
-            else:
-                cmd2: List[str] = [
-                    str(Path.cwd() / "scripts" / "transcribe_video.py"),
-                    video_path.as_posix(),
-                    "--nato-only",
-                ]
-                import sys as _sys
-                py_cmd2 = [_sys.executable, cmd2[0]] + cmd2[1:]
-                completed2 = subprocess.run(py_cmd2, capture_output=True, text=True)
-                if completed2.returncode == 0:
-                    val = completed2.stdout.strip().upper()
-                    if val:
-                        predicted = val[0]
+            out_path = Path(completed.stdout.strip().splitlines()[-1].strip())
+            if out_path.exists():
+                transcript_json_path = out_path
+                payload = json.loads(out_path.read_text(encoding="utf-8"))
+                nato_word = payload.get("first_nato_word")
+                if isinstance(nato_word, str) and nato_word:
+                    predicted = nato_word.strip().upper()[0]
         else:
             options = re.findall(r'\b([A-E])\b', text_response.upper())
             predicted = options[-1] if options else None

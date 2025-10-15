@@ -77,7 +77,7 @@ class RayEvaluator(AbstractPuzzleEvaluator):
         transcript_json_path: Optional[Path] = None
 
         if video_path is not None:
-            # Run transcriber with --nato-only and also write JSON sidecar
+            # Run transcriber
             json_out = attempt_dir / "transcription.json"
             cmd: List[str] = [
                 str(Path.cwd() / "scripts" / "transcribe_video.py"),
@@ -94,29 +94,13 @@ class RayEvaluator(AbstractPuzzleEvaluator):
 
             completed = subprocess.run([str(Path().resolve() / cmd[0])] + cmd[1:], capture_output=True, text=True)
             # Best-effort parse: transcriber prints JSON path on success when --output-json is provided
-            if completed.returncode == 0:
-                try:
-                    out_path = Path(completed.stdout.strip().splitlines()[-1].strip())
-                    if out_path.exists():
-                        transcript_json_path = out_path
-                        payload = json.loads(out_path.read_text(encoding="utf-8"))
-                        nato_letter = payload.get("first_nato_word")
-                        if isinstance(nato_letter, str) and nato_letter:
-                            predicted = nato_letter.strip().upper()[0]
-                except Exception:
-                    pass
-            else:
-                # As a fallback, try --nato-only to stdout
-                cmd2: List[str] = [
-                    str(Path.cwd() / "scripts" / "transcribe_video.py"),
-                    video_path.as_posix(),
-                    "--nato-only",
-                ]
-                completed2 = subprocess.run([str(Path().resolve() / cmd2[0])] + cmd2[1:], capture_output=True, text=True)
-                if completed2.returncode == 0:
-                    val = completed2.stdout.strip().upper()
-                    if val:
-                        predicted = val[0]
+            out_path = Path(completed.stdout.strip().splitlines()[-1].strip())
+            if out_path.exists():
+                transcript_json_path = out_path
+                payload = json.loads(out_path.read_text(encoding="utf-8"))
+                nato_letter = payload.get("first_nato_word")
+                if isinstance(nato_letter, str) and nato_letter:
+                    predicted = nato_letter.strip().upper()[0]
 
         is_correct = (predicted == correct) if predicted else False
         return RayEvaluationResult(
