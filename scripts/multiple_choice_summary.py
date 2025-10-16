@@ -18,7 +18,7 @@ from typing import Dict, Iterable, List, Optional
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_VOTE_OUTPUT_ROOT = REPO_ROOT / "data" / "voteOutput"
 
-KEYS=['predicted_option','transcribe_option','image_option','text_option']
+KEYS=['predicted_option','transcribe_option','video_option','image_option','text_option']
 
 @dataclass(frozen=True)
 class AttemptRecord:
@@ -186,6 +186,11 @@ def summarize_multiple_choice_attempts(vote_root: Path, key: str, top_misses: in
     attempts = list(_iter_attempts(vote_root,key))
     if not attempts:
         print(f"No multiple-choice evaluations found under {vote_root.as_posix()}.")
+        return False
+    
+    all_none = all(record.predicted_option is None for record in attempts)
+    if all_none:
+        print(f"All attempts have no recognized '{key}' option.")
         return False
 
     total = len(attempts)

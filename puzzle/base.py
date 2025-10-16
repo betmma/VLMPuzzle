@@ -8,12 +8,65 @@ import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar, Union
-from scripts.transcribe_video import extract_first_nato_word
 from dataclasses import dataclass
 
 PathLike = Union[str, Path]
 RecordT = TypeVar("RecordT")
 
+
+_NATO_WORDS = [
+    # Variants first where applicable
+    "ALPHA", "ALFA",
+    "BRAVO",
+    "CHARLIE",
+    "DELTA",
+    "ECHO",
+    "FOXTROT",
+    "GOLF",
+    "HOTEL",
+    "INDIA",
+    "JULIET", "JULIETT",
+    "KILO",
+    "LIMA",
+    "MIKE",
+    "NOVEMBER",
+    "OSCAR",
+    "PAPA",
+    "QUEBEC",
+    "ROMEO",
+    "SIERRA",
+    "TANGO",
+    "UNIFORM",
+    "VICTOR",
+    "WHISKEY",
+    "XRAY", "X-RAY",
+    "YANKEE",
+    "ZULU",
+]
+def extract_first_nato_word(text: str) -> Optional[str]:
+    """Return the first NATO phonetic code word found in `text`.
+
+    - Matches are case-insensitive and must align to word boundaries.
+    - Accepts common variants (e.g., ALFA/ALPHA, JULIET/JULIETT, XRAY/X-RAY).
+    - Returns the normalized upper-case code word as found in `_NATO_WORDS`.
+    - Returns None when no code word is present.
+    """
+
+    if not text:
+        return None
+    import re
+
+    # Build a single regex from the word list with word boundaries.
+    # Use alternation ordered as in _NATO_WORDS so variants keep priority.
+    pattern = r"\b(?:(%s))\b" % ("|".join(map(re.escape, _NATO_WORDS)))
+    regex = re.compile(pattern, flags=re.IGNORECASE)
+    match = regex.findall(text)
+    if not match:
+        return None
+    # Normalize to the canonical upper-case variant from the list
+    found = match[0]
+    found_upper = found.upper()
+    return found_upper[0]
 
 class AbstractPuzzleGenerator(ABC, Generic[RecordT]):
     """Base class for dataset builders that emit puzzle records."""
@@ -87,6 +140,7 @@ class AbstractPuzzleEvaluator(ABC):
         puzzle_id: str
         correct_option: str
         transcribe_option: Optional[str]
+        video_option: Optional[str]
         image_option: Optional[str]
         text_option: Optional[str]
         attempt_dir: str
@@ -96,6 +150,7 @@ class AbstractPuzzleEvaluator(ABC):
                 "puzzle_id": self.puzzle_id,
                 "correct_option": self.correct_option,
                 "transcribe_option": self.transcribe_option,
+                "video_option": self.video_option,
                 "image_option": self.image_option,
                 "text_option": self.text_option,
                 "attempt_dir": self.attempt_dir,

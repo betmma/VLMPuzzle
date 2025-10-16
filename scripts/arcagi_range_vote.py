@@ -5,7 +5,7 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Optional
+from typing import Any, Counter, Dict, List, Sequence, Optional
 import numpy as np
 from PIL import Image
 
@@ -157,27 +157,28 @@ def summarize_vote_root(
     perfect_attempts = 0
     no_change_attempts = 0  # attempts where output area equals original puzzle input area
     by_puzzle: Dict[str, Dict[str, Any]] = {}
+    acc_counts = Counter()
 
     for rec in evals:
         puzzle_id = str(rec.get("puzzle_id", ""))
         result_png = rec.get("result_png") or ""
-        if not puzzle_id or not result_png:
-            continue
         result_path = Path(result_png)
-        if not result_path.exists():
-            continue
 
-        try:
-            result = evaluator.evaluate(puzzle_id, result_path)
-        except Exception:
-            continue
+        result=rec['evaluation']
 
         total_attempts += 1
-        correct = int(result.correct_cells)
-        total = int(result.total_cells)
+        correct = int(result['correct_cells'])
+        total = int(result['total_cells'])
         is_perfect = total > 0 and (correct == total)
         if is_perfect:
             perfect_attempts += 1
+        
+        acc = round(result['accuracy'],1)
+        acc_counts[acc] += 1
+        # if acc>0.9:
+        #     print(f"High accuracy {acc} for puzzle {puzzle_id} at {result_path}")
+        #     result_dir = result_path.parent
+        #     shutil.copytree(result_dir, vote_root.parent / "arcagi2_high_accuracy" / puzzle_id / result_dir.name)
 
         # Update per-puzzle aggregation
         if puzzle_id not in by_puzzle:
@@ -186,6 +187,7 @@ def summarize_vote_root(
         by_puzzle[puzzle_id]["perfect"] = by_puzzle[puzzle_id]["perfect"] or is_perfect
 
         # Detect attempts that changed nothing inside the designed test output area
+        # no_change=all(all(i==5 for i in j)for j in result['predicted_grid']) # white is predicted as 5, so all white = all 5 means no change
         try:
             record = evaluator.get_record(puzzle_id)
             puzzle_img_path = evaluator.resolve_path(record.get("puzzle_image_path"))
@@ -205,29 +207,22 @@ def summarize_vote_root(
                 diff = a.astype(np.float32) - b.astype(np.float32)
                 dist = np.sqrt(np.sum(diff * diff, axis=2))
                 mean_dist = float(dist.mean())
+                # print(mean_dist)
                 no_change = mean_dist <= float(no_change_threshold)
             else:
                 no_change = False
-        except Exception:
+        except Exception as e:
+            print(e)
             no_change = False
         if no_change:
             no_change_attempts += 1
-
-        # Persist recomputed evaluation back to attempt evaluation.json
-        rec["evaluation"] = result.to_dict()
-        rec["no_change_in_output_area"] = bool(no_change)
-        eval_json_path = Path(rec.get("vote_output_directory") or "").joinpath("evaluation.json")
-        try:
-            if eval_json_path.parent.exists():
-                write_json(eval_json_path, rec)
-        except Exception:
-            pass
 
     total_puzzles = len([p for p in by_puzzle.keys() if p])
     puzzles_with_perfect = sum(1 for p in by_puzzle.values() if p.get("perfect"))
     attempt_accuracy = (perfect_attempts / total_attempts) if total_attempts else 0.0
     puzzle_success_rate = (puzzles_with_perfect / total_puzzles) if total_puzzles else 0.0
 
+    acc_counts = dict(sorted(acc_counts.items()))
     return {
         "vote_root": vote_root.as_posix(),
         "attempts_total": total_attempts,
@@ -238,6 +233,7 @@ def summarize_vote_root(
         "puzzles_total": total_puzzles,
         "puzzles_with_any_perfect_attempt": puzzles_with_perfect,
         "puzzle_success_rate": puzzle_success_rate,
+        "accuracy_counts": dict(acc_counts),
     }
 
 

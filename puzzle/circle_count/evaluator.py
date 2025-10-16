@@ -167,6 +167,8 @@ class CircleCountEvaluator(AbstractPuzzleEvaluator):
         return json_out if json_out.exists() else None, None
 
     def _extract_number(self, text: str) -> Optional[int]:
+        if '**' in text:
+            text = ' '.join(re.findall(r'\*\*(.*?)\*\*', text))
         digits = re.findall(r"\b\d+\b", text)
         if digits:
             return int(digits[-1])

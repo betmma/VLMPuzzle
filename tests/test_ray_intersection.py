@@ -62,9 +62,12 @@ def test_ray_intersection_evaluator_red_detection(tmp_path):
 
     frame = np.zeros((240, 240, 3), dtype=np.uint8)
     cv2.circle(frame, (120, 120), 16, (255, 10, 10), -1)
-    predicted, scores = evaluator._score_red_hits(frame, record)
+    predicted, count, centroid = evaluator._score_red_hits(frame, record)
     assert predicted == "C"
-    assert scores.get("C", 0.0) > 0.5
+    assert count >= 20
+    assert centroid is not None
+    assert np.isclose(centroid[0], 120.0, atol=3.0)
+    assert np.isclose(centroid[1], 120.0, atol=3.0)
 
 
 def test_ray_intersection_evaluate_without_video(tmp_path):
@@ -81,8 +84,7 @@ def test_ray_intersection_evaluate_without_video(tmp_path):
     (attempt_dir / "content.txt").write_text("Answer is Charlie", encoding="utf-8")
 
     result = evaluator.evaluate("demo", candidate_path)
-    assert result.transcript_option == "C"
-    assert result.transcript_is_correct is True
-    assert result.red_scores == {}
-    assert result.red_is_correct is False
-    assert result.combined_is_correct is False
+    assert result.image_option is None
+    assert result.red_pixel_count == 0
+    assert result.red_centroid is None
+    assert result.text_option == "C"
