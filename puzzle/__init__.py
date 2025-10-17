@@ -35,6 +35,9 @@ __all__ = [
     "RayIntersectionEvaluator",
     "RayIntersectionPuzzleRecord",
     "RayIntersectionEvaluationResult",
+    "MidpointGenerator",
+    "MidpointEvaluator",
+    "Segment",
     "ArcConnectGenerator",
     "ArcConnectEvaluator",
     "ArcConnectPuzzleRecord",
@@ -99,6 +102,11 @@ from .ray import (
 from .ray_intersection import (
     RayIntersectionGenerator,
     RayIntersectionEvaluator,
+)
+
+from .midpoint import (
+    MidpointGenerator,
+    MidpointEvaluator,
 )
 
 # Arc connection (speak option via NATO)

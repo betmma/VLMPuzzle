@@ -11,17 +11,11 @@ from typing import Any, List, Sequence, Tuple
 # Utility script to batch-generate puzzles via CLI and then run mirrorVote.py on each.
 
 GENERATOR_MODULES = {
-    "arc_connect": "puzzle.arc_connect.generator",
-    "arcagi": "puzzle.arcagi.generator",
-    "circle_count": "puzzle.circle_count.generator",
-    "jigsaw": "puzzle.jigsaw.generator",
-    "maze": "puzzle.maze.generator",
-    "mirror": "puzzle.mirror.generator",
-    "sudoku": "puzzle.sudoku.generator",
-    "rects": "puzzle.rects.generator",
-    "ray": "puzzle.ray.generator",
-    "ray_intersection": "puzzle.ray_intersection.generator",
 }
+for dirpath, dirnames, filenames in os.walk('puzzle'):
+    for dirname in dirnames:
+        if os.path.exists(os.path.join(dirpath, dirname, '__init__.py')) and os.path.exists(os.path.join(dirpath, dirname, 'generator.py')):
+            GENERATOR_MODULES[dirname] = f"puzzle.{dirname}.generator"
 
 
 def parse_generator_tokens(entries: Sequence[str]) -> List[Tuple[str, Any]]:

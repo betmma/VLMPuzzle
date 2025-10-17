@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import math
-import random
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +19,8 @@ from typing import List, Optional, Sequence, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 
-from ..base import AbstractPuzzleGenerator, PathLike
+from ..base import PathLike
+from ..point_target_base import PointTargetPuzzleGenerator, PointCandidate
 
 
 @dataclass
@@ -38,16 +38,6 @@ class RaySegment:
 
 
 @dataclass
-class CandidatePoint:
-    x: float
-    y: float
-    label: str
-
-    def to_dict(self) -> dict:
-        return {"x": self.x, "y": self.y, "label": self.label}
-
-
-@dataclass
 class RayIntersectionPuzzleRecord:
     id: str
     prompt: str
@@ -55,7 +45,7 @@ class RayIntersectionPuzzleRecord:
     margin: int
     intersection: Tuple[float, float]
     rays: List[RaySegment]
-    candidates: List[CandidatePoint]
+    candidates: List[PointCandidate]
     point_radius: int
     correct_option: str
     puzzle_image_path: str
@@ -78,7 +68,10 @@ class RayIntersectionPuzzleRecord:
         }
 
 
-class RayIntersectionGenerator(AbstractPuzzleGenerator[RayIntersectionPuzzleRecord]):
+CandidatePoint = PointCandidate
+
+
+class RayIntersectionGenerator(PointTargetPuzzleGenerator[RayIntersectionPuzzleRecord]):
     """Generate puzzles with partially hidden ray intersections."""
 
     def __init__(
@@ -90,23 +83,18 @@ class RayIntersectionGenerator(AbstractPuzzleGenerator[RayIntersectionPuzzleReco
         seed: Optional[int] = None,
         prompt: Optional[str] = None,
     ) -> None:
-        super().__init__(output_dir)
-
-        width = int(canvas_width)
-        if aspect and aspect > 0:
-            height = int(round(width / float(aspect)))
-        else:
-            height = width
-        self.canvas_dimensions = (width, height)
-        self.margin = max(18, int(round(min(width, height) * 0.06)))
-        self._rng = random.Random(seed)
-
         if prompt is None:
             prompt = (
                 "Extend the three lines and mark the intersection point as red. "
                 "Speak out which option is the intersection point using phonetics alphabet"
             )
-        self.prompt = prompt
+        super().__init__(
+            output_dir,
+            canvas_width=canvas_width,
+            aspect=aspect,
+            seed=seed,
+            prompt=prompt,
+        )
 
         out_root = Path(self.output_dir)
         self.puzzle_dir = out_root / "puzzles"
@@ -115,30 +103,22 @@ class RayIntersectionGenerator(AbstractPuzzleGenerator[RayIntersectionPuzzleReco
         self.solution_dir.mkdir(parents=True, exist_ok=True)
 
     def create_puzzle(self, *, puzzle_id: Optional[str] = None) -> RayIntersectionPuzzleRecord:
-        width, height = self.canvas_dimensions
-        left = self.margin
-        top = self.margin
-        right = width - self.margin
-        bottom = height - self.margin
-
-        intersection = self._pick_intersection(left, top, right, bottom)
-        rays = self._build_rays(intersection, left, top, right, bottom)
-        point_radius = 10
-        candidates, correct_label = self._place_candidates(intersection, point_radius, left, top, right, bottom)
+        intersection = self.pick_target_point()
+        rays = self._build_rays(intersection)
+        point_radius = self.point_radius
+        candidates, correct_label = self.place_candidates(intersection)
 
         pid = puzzle_id or str(uuid.uuid4())
         puzzle_img = self._render(
             intersection=intersection,
             rays=rays,
             candidates=candidates,
-            point_radius=point_radius,
             highlight_label=None,
         )
         solution_img = self._render(
             intersection=intersection,
             rays=rays,
             candidates=candidates,
-            point_radius=point_radius,
             highlight_label=correct_label,
         )
 
@@ -164,27 +144,11 @@ class RayIntersectionGenerator(AbstractPuzzleGenerator[RayIntersectionPuzzleReco
     def create_random_puzzle(self) -> RayIntersectionPuzzleRecord:
         return self.create_puzzle()
 
-    def _pick_intersection(self, left: int, top: int, right: int, bottom: int) -> Tuple[float, float]:
-        width = right - left
-        height = bottom - top
-        center_x = left + width * 0.5
-        center_y = top + height * 0.5
-        jitter_x = self._rng.uniform(-0.18 * width, 0.18 * width)
-        jitter_y = self._rng.uniform(-0.18 * height, 0.18 * height)
-        x = center_x + jitter_x
-        y = center_y + jitter_y
-        x = min(max(left + width * 0.1, x), right - width * 0.1)
-        y = min(max(top + height * 0.1, y), bottom - height * 0.1)
-        return (x, y)
-
     def _build_rays(
         self,
         intersection: Tuple[float, float],
-        left: int,
-        top: int,
-        right: int,
-        bottom: int,
     ) -> List[RaySegment]:
+        left, top, right, bottom = self.canvas_bounds()
         min_sep = math.radians(35.0)
         angles: List[float] = []
         attempts = 0
@@ -200,7 +164,7 @@ class RayIntersectionGenerator(AbstractPuzzleGenerator[RayIntersectionPuzzleReco
 
         segments: List[RaySegment] = []
         for angle in angles:
-            end_point = self._ray_to_bounds(intersection, angle, left, top, right, bottom)
+            end_point = self._ray_to_bounds(intersection, angle)
             start_point = self._edge_segment_start(intersection, end_point)
             segments.append(RaySegment(angle=angle, start=start_point, end=end_point))
         return segments
@@ -209,11 +173,8 @@ class RayIntersectionGenerator(AbstractPuzzleGenerator[RayIntersectionPuzzleReco
         self,
         origin: Tuple[float, float],
         angle: float,
-        left: int,
-        top: int,
-        right: int,
-        bottom: int,
     ) -> Tuple[float, float]:
+        left, top, right, bottom = self.canvas_bounds()
         ox, oy = origin
         dx = math.cos(angle)
         dy = math.sin(angle)
@@ -266,63 +227,12 @@ class RayIntersectionGenerator(AbstractPuzzleGenerator[RayIntersectionPuzzleReco
         sy = oy + dy * ratio
         return (sx, sy)
 
-    def _place_candidates(
-        self,
-        intersection: Tuple[float, float],
-        radius: int,
-        left: int,
-        top: int,
-        right: int,
-        bottom: int,
-    ) -> Tuple[List[CandidatePoint], str]:
-        base_x, base_y = intersection
-        letters = list("ABCDE")
-        self._rng.shuffle(letters)
-        correct_label = letters[0]
-        candidates: List[CandidatePoint] = []
-        candidates.append(CandidatePoint(x=base_x, y=base_y, label=correct_label))
-
-        max_attempts = 600
-        attempt = 0
-        spread = max(18.0, 0.9 * radius)
-        while len(candidates) < 5 and attempt < max_attempts:
-            attempt += 1
-            angle = self._rng.uniform(0.0, math.tau)
-            distance = self._rng.uniform(spread * 0.8, spread * 1.8)
-            cx = base_x + math.cos(angle) * distance
-            cy = base_y + math.sin(angle) * distance
-            if not (left + radius <= cx <= right - radius and top + radius <= cy <= bottom - radius):
-                continue
-            too_close = False
-            for existing in candidates:
-                if math.hypot(existing.x - cx, existing.y - cy) < radius * 1.2:
-                    too_close = True
-                    break
-            if too_close:
-                continue
-            label = letters[len(candidates)]
-            candidates.append(CandidatePoint(x=cx, y=cy, label=label))
-            if attempt==1 and self._rng.random()<0.8:
-                base_x, base_y = cx, cy
-        if len(candidates) < 5:
-            padding = radius * 1.6
-            needed = 5 - len(candidates)
-            for i in range(needed):
-                shift_x = padding * (1 if i % 2 == 0 else -1)
-                shift_y = padding * ((i // 2) % 2 * 2 - 1)
-                cx = min(max(left + radius, base_x + shift_x), right - radius)
-                cy = min(max(top + radius, base_y + shift_y), bottom - radius)
-                label = letters[len(candidates)]
-                candidates.append(CandidatePoint(x=cx, y=cy, label=label))
-        return candidates, correct_label
-
     def _render(
         self,
         *,
         intersection: Tuple[float, float],
         rays: Sequence[RaySegment],
-        candidates: Sequence[CandidatePoint],
-        point_radius: int,
+        candidates: Sequence[PointCandidate],
         highlight_label: Optional[str],
     ) -> Image.Image:
         width, height = self.canvas_dimensions
@@ -342,27 +252,11 @@ class RayIntersectionGenerator(AbstractPuzzleGenerator[RayIntersectionPuzzleReco
                 width=stroke_width,
             )
 
-        font = ImageFont.load_default(15)
-        outline_color = (32, 32, 32)
-        text_color = (0, 0, 0)
-        highlight_color = (198, 24, 24)
-
-        for candidate in sorted(candidates, key=lambda c: c.label):
-            cx = int(round(candidate.x))
-            cy = int(round(candidate.y))
-            bbox = (cx - point_radius, cy - point_radius, cx + point_radius, cy + point_radius)
-            if highlight_label is not None and candidate.label == highlight_label:
-                fill_color = (255, 220, 220)
-                draw.ellipse(bbox, fill=fill_color)
-                draw.ellipse(bbox, outline=highlight_color, width=max(3, stroke_width // 2))
-            else:
-                draw.ellipse(bbox, outline=outline_color, width=max(3, stroke_width // 2), fill=(255, 255, 255))
-            text_bbox = font.getbbox(candidate.label)
-            text_width = text_bbox[2] - text_bbox[0]
-            text_height = text_bbox[3] - text_bbox[1]
-            tx = cx - text_width // 2
-            ty = cy - text_height 
-            draw.text((tx, ty), candidate.label, fill=text_color, font=font)
+        self.draw_candidates(
+            draw,
+            candidates=candidates,
+            highlight_label=highlight_label,
+        )
 
         return base
 
