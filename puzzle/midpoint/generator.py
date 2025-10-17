@@ -68,35 +68,9 @@ CandidatePoint = PointCandidate
 
 class MidpointGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles that hide the midpoint of a segment."""
-
-    def __init__(
-        self,
-        output_dir: PathLike = "data/midpoint",
-        *,
-        canvas_width: int = 480,
-        aspect: Optional[float] = None,
-        seed: Optional[int] = None,
-        prompt: Optional[str] = None,
-        option_labels: Sequence[str] = ("A", "B", "C", "D", "E"),
-    ) -> None:
-        if prompt is None:
-            prompt = (
-                "Connect the two large circles and mark the midpoint as red. "
-                "Speak out which option is the midpoint using phonetics alphabet"
-            )
-        super().__init__(
-            output_dir,
-            canvas_width=canvas_width,
-            aspect=aspect,
-            seed=seed,
-            prompt=prompt,
-            option_labels=option_labels,
-        )
-        out_root = Path(self.output_dir)
-        self.puzzle_dir = out_root / "puzzles"
-        self.solution_dir = out_root / "solutions"
-        self.puzzle_dir.mkdir(parents=True, exist_ok=True)
-        self.solution_dir.mkdir(parents=True, exist_ok=True)
+    DEFAULT_OUTPUT_DIR="data/midpoint"
+    DEFAULT_PROMPT="Connect the two large circles and mark the midpoint as red. Speak out which option is the midpoint using phonetics alphabet"
+    DEFAULT_GPT5_PROMPT="Which option is the midpoint of the two circles? Answer an option in A-E."
 
     def create_puzzle(self, *, puzzle_id: Optional[str] = None) -> MidpointPuzzleRecord:
         midpoint = self.pick_target_point()
@@ -241,28 +215,8 @@ __all__ = [
 ]
 
 
-def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate midpoint puzzles")
-    parser.add_argument("count", type=int, help="Number of puzzles to create")
-    parser.add_argument("--output-dir", type=Path, default=Path("data/midpoint"))
-    parser.add_argument("--canvas-width", type=int, default=480)
-    parser.add_argument("--aspect", type=float, default=None)
-    parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--prompt", type=str, default=None)
-    return parser.parse_args(argv)
-
-
 def main(argv: Optional[List[str]] = None) -> None:
-    args = _parse_args(argv)
-    generator = MidpointGenerator(
-        args.output_dir,
-        canvas_width=args.canvas_width,
-        aspect=args.aspect,
-        seed=args.seed,
-        prompt=args.prompt,
-    )
-    records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
-    generator.write_metadata(records, Path(args.output_dir) / "puzzles.json")
+    MidpointGenerator.main(MidpointGenerator, argv)
 
 
 if __name__ == "__main__":

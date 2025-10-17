@@ -73,34 +73,9 @@ CandidatePoint = PointCandidate
 
 class RayIntersectionGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles with partially hidden ray intersections."""
-
-    def __init__(
-        self,
-        output_dir: PathLike = "data/ray_intersection",
-        *,
-        canvas_width: int = 480,
-        aspect: Optional[float] = None,
-        seed: Optional[int] = None,
-        prompt: Optional[str] = None,
-    ) -> None:
-        if prompt is None:
-            prompt = (
-                "Extend the three lines and mark the intersection point as red. "
-                "Speak out which option is the intersection point using phonetics alphabet"
-            )
-        super().__init__(
-            output_dir,
-            canvas_width=canvas_width,
-            aspect=aspect,
-            seed=seed,
-            prompt=prompt,
-        )
-
-        out_root = Path(self.output_dir)
-        self.puzzle_dir = out_root / "puzzles"
-        self.solution_dir = out_root / "solutions"
-        self.puzzle_dir.mkdir(parents=True, exist_ok=True)
-        self.solution_dir.mkdir(parents=True, exist_ok=True)
+    DEFAULT_OUTPUT_DIR="data/ray_intersection"
+    DEFAULT_PROMPT="Extend the three lines and mark the intersection point as red. Speak out which option is the intersection point using phonetics alphabet"
+    DEFAULT_GPT5_PROMPT="Which option is the intersection point of the three lines? Answer an option in A-E."
 
     def create_puzzle(self, *, puzzle_id: Optional[str] = None) -> RayIntersectionPuzzleRecord:
         intersection = self.pick_target_point()

@@ -43,6 +43,7 @@ def build_generator_command(
     count: int,
     output_dir: Path,
     option_tokens: Sequence[Tuple[str, Any]],
+    use_gpt_5: bool,
 ) -> List[str]:
     command: List[str] = [sys.executable, "-m", module_name, str(count)]
     command.extend(["--output-dir", output_dir.as_posix()])
@@ -57,6 +58,8 @@ def build_generator_command(
         if value is None:
             continue
         command.extend([flag, str(value)])
+    if use_gpt_5:
+        command.append("--use-gpt-5")
     return command
 
 
@@ -178,7 +181,7 @@ def main() -> None:
     option_tokens = parse_generator_tokens(tuple(args.generator_option))
 
     before_records = read_metadata(metadata_path)
-    generator_command = build_generator_command(module_name, args.count, output_dir, option_tokens)
+    generator_command = build_generator_command(module_name, args.count, output_dir, option_tokens, args.use_gpt_5)
     print("Running:", " ".join(generator_command))
     run_generator_cli(generator_command)
 

@@ -71,8 +71,9 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
     CANDIDATE_OUTLINE_WIDTH: int = 4
     CANDIDATE_HIGHLIGHT_OUTLINE_WIDTH: int = 4
     CANDIDATE_LABEL_OFFSET_Y: int = 0
-    DEFAULT_OUTPUT_DIR: PathLike = None
+    DEFAULT_OUTPUT_DIR: str = None
     DEFAULT_PROMPT: str = None
+    DEFAULT_GPT5_PROMPT: str = None
 
     def __init__(
         self,
@@ -85,7 +86,7 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
         option_labels: Sequence[str] = ("A", "B", "C", "D", "E"),
         margin_ratio: float = 0.06,
     ) -> None:
-        output_dir = output_dir if output_dir is not None else self.DEFAULT_OUTPUT_DIR
+        output_dir = output_dir if output_dir is not None else Path(self.DEFAULT_OUTPUT_DIR)
         prompt = prompt if prompt is not None else self.DEFAULT_PROMPT
         super().__init__(output_dir)
         width = int(canvas_width)
@@ -270,7 +271,7 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
         draw = ImageDraw.Draw(base)
         return draw, base
     
-    def save_puzzle(self) -> None:
+    def save_puzzle(self) -> PointTargetPuzzleRecord:
         pid = str(uuid.uuid4())
         self.pid=pid
         puzzle_img = self._render(
@@ -298,13 +299,14 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
     
     @staticmethod
     def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
-        parser = argparse.ArgumentParser(description="Generate parallelogram puzzles")
+        parser = argparse.ArgumentParser(description="Generate point target puzzles")
         parser.add_argument("count", type=int, help="Number of puzzles to create")
-        parser.add_argument("--output-dir", type=Path, default=Path("data/parallelogram"))
+        parser.add_argument("--output-dir", type=Path, default=None)
         parser.add_argument("--canvas-width", type=int, default=480)
         parser.add_argument("--aspect", type=float, default=None)
         parser.add_argument("--seed", type=int, default=None)
         parser.add_argument("--prompt", type=str, default=None)
+        parser.add_argument("--use-gpt-5", action="store_true", help="Use GPT5_PROMPT defined by puzzle generator. Will be overridden by --prompt if both are provided.")
         return parser.parse_args(argv)
 
     @staticmethod
@@ -315,10 +317,10 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
             canvas_width=args.canvas_width,
             aspect=args.aspect,
             seed=args.seed,
-            prompt=args.prompt,
+            prompt=cls.DEFAULT_GPT5_PROMPT if args.use_gpt_5 and not args.prompt else args.prompt,
         )
         records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
-        generator.write_metadata(records, Path(args.output_dir) / "puzzles.json")
+        generator.write_metadata(records, generator.output_dir / "puzzles.json")
 
 
 class PointTargetPuzzleEvaluator(AbstractPuzzleEvaluator):

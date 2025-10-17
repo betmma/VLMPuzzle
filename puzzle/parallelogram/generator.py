@@ -11,12 +11,13 @@ class ParallelogramGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles that hide the parallelogram of a segment."""
     DEFAULT_OUTPUT_DIR="data/parallelogram"
     DEFAULT_PROMPT="Draw a parallelogram with two sides given. Mark the fourth vertex red. Speak out which option is the fourth vertex using phonetics alphabet"
+    DEFAULT_GPT5_PROMPT="Which option is the fourth vertex of the parallelogram with two sides given? Answer an option in A-E."
 
     def create_puzzle(self) -> PointTargetPuzzleRecord:
         target_point = self.pick_target_point()
         tries=0
         distance_threshold = self.canvas_short_side * 0.3
-        while tries<9999999:
+        while tries<9999:
             p1, p2 = self.pick_target_point(0.5), self.pick_target_point(0.5)
             # Calculate the fourth point of the parallelogram
             p3 = Point(
@@ -31,6 +32,7 @@ class ParallelogramGenerator(PointTargetPuzzleGenerator):
         self.parallelogram_points = (p1, p2, p3, target_point)
         self.place_candidates(target_point)
         record = self.save_puzzle()
+        record.parallelogram_points=self.parallelogram_points
         return record
 
     def _render(self, highlight_label: Optional[str]) -> Image.Image:
