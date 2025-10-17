@@ -1,7 +1,7 @@
 from veo3 import call_api_raw,prepare_image_data,create_output_directory,API_KEY,BASE_URL,API_TIMEOUT,USE_STREAM,call_openai_with_retry,client,save_mixed_content
 import os,time,json
 
-MODEL_NAME = "claude-sonnet-4-5-20250929-thinking"
+MODEL_NAME = "gemini-2.5-pro"
 
 def generate(input_image_path, prompt_text)->str:
     """use gpt-5 to process images with prompt_text, return response content and output directory"""

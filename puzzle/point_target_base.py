@@ -13,21 +13,26 @@ import math
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Generic, Iterable, List, Optional, Sequence, Tuple, TypeVar
+from typing import Any, Dict, Generic, Iterable, List, Optional, Sequence, Tuple
+import argparse
+import json
+import uuid
 
 import cv2
 import numpy as np
 
 from .base import AbstractPuzzleEvaluator, AbstractPuzzleGenerator, PathLike
 
-try:  # Pillow is an optional runtime dependency for rendering
-    from PIL import ImageFont, ImageDraw
-except ImportError:  # pragma: no cover - typed via TYPE_CHECKING fallbacks
-    ImageFont = None  # type: ignore[assignment]
-    ImageDraw = None  # type: ignore[assignment]
+from PIL import Image, ImageFont, ImageDraw
 
-RecordT = TypeVar("RecordT")
 
+@dataclass
+class Point:
+    x: float
+    y: float
+
+    def to_list(self) -> List[float]:
+        return [self.x, self.y]
 
 @dataclass
 class PointCandidate:
@@ -40,11 +45,24 @@ class PointCandidate:
     def to_dict(self) -> Dict[str, object]:
         return {"x": self.x, "y": self.y, "label": self.label}
 
+@dataclass
+class PointTargetPuzzleRecord:
+    """Base record fields for point-target puzzles."""
 
-class PointTargetPuzzleGenerator(AbstractPuzzleGenerator[RecordT], Generic[RecordT]):
+    id: str
+    prompt: str
+    canvas_dimensions: Tuple[int, int]
+    margin: int
+    candidates: List[PointCandidate]
+    correct_option: str
+    puzzle_image_path: str
+    solution_image_path: str
+
+class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
     """Base generator providing canvas configuration and candidate placement."""
 
     POINT_RADIUS: int = 10
+    LINE_WIDTH: int = 5
     CANDIDATE_OUTLINE_COLOR: Tuple[int, int, int] = (32, 32, 32)
     CANDIDATE_HIGHLIGHT_COLOR: Tuple[int, int, int] = (198, 24, 24)
     CANDIDATE_TEXT_COLOR: Tuple[int, int, int] = (0, 0, 0)
@@ -53,6 +71,8 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator[RecordT], Generic[Recor
     CANDIDATE_OUTLINE_WIDTH: int = 4
     CANDIDATE_HIGHLIGHT_OUTLINE_WIDTH: int = 4
     CANDIDATE_LABEL_OFFSET_Y: int = 0
+    DEFAULT_OUTPUT_DIR: PathLike = None
+    DEFAULT_PROMPT: str = None
 
     def __init__(
         self,
@@ -65,19 +85,21 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator[RecordT], Generic[Recor
         option_labels: Sequence[str] = ("A", "B", "C", "D", "E"),
         margin_ratio: float = 0.06,
     ) -> None:
+        output_dir = output_dir if output_dir is not None else self.DEFAULT_OUTPUT_DIR
+        prompt = prompt if prompt is not None else self.DEFAULT_PROMPT
         super().__init__(output_dir)
         width = int(canvas_width)
         if width <= 0:
             raise ValueError("canvas_width must be positive")
         if aspect and aspect > 0:
-            height = int(round(width / float(aspect)))
+            height = round(width / float(aspect))
         else:
             height = width
         if height <= 0:
             raise ValueError("Derived canvas height must be positive")
         self.canvas_dimensions = (width, height)
         margin_base = min(width, height)
-        computed_margin = int(round(margin_base * max(0.0, margin_ratio)))
+        computed_margin = round(margin_base * max(0.0, margin_ratio))
         self.margin = max(18, computed_margin)
         self._rng = random.Random(seed)
         if not option_labels:
@@ -86,6 +108,11 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator[RecordT], Generic[Recor
         self.prompt = prompt
         self._candidate_font: Optional[Any] = None
         self.point_radius = int(self.POINT_RADIUS)
+        out_root = Path(self.output_dir)
+        self.puzzle_dir = out_root / "puzzles"
+        self.solution_dir = out_root / "solutions"
+        self.puzzle_dir.mkdir(parents=True, exist_ok=True)
+        self.solution_dir.mkdir(parents=True, exist_ok=True)
 
     @property
     def rng(self) -> random.Random:
@@ -98,43 +125,49 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator[RecordT], Generic[Recor
         right = width - self.margin
         bottom = height - self.margin
         return left, top, right, bottom
+    
+    def inside_canvas(
+        self,
+        point: Point,
+    ) -> bool:
+        x, y = point.to_list()
+        left, top, right, bottom = self.canvas_bounds()
+        return (left <= x <= right) and (top <= y <= bottom)
+    
+    def distance(
+        self,
+        p1: Point,
+        p2: Point,
+    ) -> float:
+        return math.hypot(p1.x - p2.x, p1.y - p2.y)
+    
+    @property
+    def canvas_short_side(self) -> int:
+        width, height = self.canvas_dimensions
+        return min(width, height)
 
     def pick_target_point(
         self,
-        *,
-        jitter_ratio: float = 0.18,
-        clamp_ratio: float = 0.1,
-    ) -> Tuple[float, float]:
+        jitter_ratio: float = 0.36,
+    ) -> Point:
+        jitter_ratio/=2 # jitter_ratio = 1 means full spread across the canvas
         left, top, right, bottom = self.canvas_bounds()
-        width = right - left
-        height = bottom - top
+        width, height = right - left, bottom - top
         center_x = left + width * 0.5
         center_y = top + height * 0.5
         jitter_x = self._rng.uniform(-jitter_ratio * width, jitter_ratio * width)
         jitter_y = self._rng.uniform(-jitter_ratio * height, jitter_ratio * height)
         x = center_x + jitter_x
         y = center_y + jitter_y
-        min_x = left + width * clamp_ratio
-        max_x = right - width * clamp_ratio
-        min_y = top + height * clamp_ratio
-        max_y = bottom - height * clamp_ratio
-        if x < min_x:
-            x = min_x
-        elif x > max_x:
-            x = max_x
-        if y < min_y:
-            y = min_y
-        elif y > max_y:
-            y = max_y
-        return (x, y)
+        return Point(x, y)
 
     def place_candidates(
         self,
-        true_point: Tuple[float, float],
-    ) -> Tuple[List[PointCandidate], str]:
+        true_point: Point,
+    ) -> None:
         radius = self.point_radius
         left, top, right, bottom = self.canvas_bounds()
-        base_x, base_y = true_point
+        base_x, base_y = true_point.x, true_point.y
         labels = list(self.option_labels)
         self._rng.shuffle(labels)
         correct_label = labels[0]
@@ -186,13 +219,12 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator[RecordT], Generic[Recor
                     cy = bottom - radius
                 label = labels[len(candidates)]
                 candidates.append(PointCandidate(x=cx, y=cy, label=label))
-        return candidates, correct_label
+        self.candidates, self.correct_label= candidates, correct_label
 
     def draw_candidates(
         self,
         draw: Any,
         *,
-        candidates: Sequence[PointCandidate],
         highlight_label: Optional[str] = None,
     ) -> None:
         if ImageDraw is None:
@@ -201,9 +233,9 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator[RecordT], Generic[Recor
         active_highlight = highlight_label.upper() if isinstance(highlight_label, str) else None
 
         point_radius = self.point_radius
-        for candidate in sorted(candidates, key=lambda c: c.label):
-            cx = int(round(candidate.x))
-            cy = int(round(candidate.y))
+        for candidate in sorted(self.candidates, key=lambda c: c.label):
+            cx = round(candidate.x)
+            cy = round(candidate.y)
             bbox = (cx - point_radius, cy - point_radius, cx + point_radius, cy + point_radius)
             is_highlight = active_highlight is not None and candidate.label.upper() == active_highlight
             outline = self.CANDIDATE_HIGHLIGHT_COLOR if is_highlight else self.CANDIDATE_OUTLINE_COLOR
@@ -217,12 +249,76 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator[RecordT], Generic[Recor
             ty = cy - text_height + self.CANDIDATE_LABEL_OFFSET_Y
             draw.text((tx, ty), candidate.label, fill=self.CANDIDATE_TEXT_COLOR, font=font)
 
+    def draw_line(self,draw,points:List[Point])->None:
+        draw.line(
+            [[round(p.x), round(p.y)] for p in points],
+            fill=self.CANDIDATE_OUTLINE_COLOR,
+            width=self.LINE_WIDTH,
+        )
+
     def _get_candidate_font(self) -> Any:
-        if ImageFont is None:
-            raise RuntimeError("Pillow ImageFont is unavailable; provide a font instance explicitly")
         if self._candidate_font is None:
-            self._candidate_font = ImageFont.load_default()
+            self._candidate_font = ImageFont.load_default(15)
         return self._candidate_font
+    
+    def _render(self, highlight_label: Optional[str]) -> Image.Image:
+        raise NotImplementedError("Subclasses must implement _render method")
+    
+    def get_draw_base(self) -> Tuple[ImageDraw.ImageDraw, Image.Image]:
+        width, height = self.canvas_dimensions
+        base = Image.new("RGB", (width, height), (255, 255, 255))
+        draw = ImageDraw.Draw(base)
+        return draw, base
+    
+    def save_puzzle(self) -> None:
+        pid = str(uuid.uuid4())
+        self.pid=pid
+        puzzle_img = self._render(
+            highlight_label=None,
+        )
+        solution_img = self._render(
+            highlight_label=self.correct_label,
+        )
+
+        self.puzzle_path = self.puzzle_dir / f"{pid}_puzzle.png"
+        self.solution_path = self.solution_dir / f"{pid}_solution.png"
+        puzzle_img.save(self.puzzle_path)
+        solution_img.save(self.solution_path)
+        return PointTargetPuzzleRecord(
+            id=self.pid,
+            prompt=self.prompt,
+            canvas_dimensions=self.canvas_dimensions,
+            margin=self.margin,
+            candidates=self.candidates,
+            correct_option=self.correct_label,
+            puzzle_image_path=self.relativize_path(self.puzzle_path),
+            solution_image_path=self.relativize_path(self.solution_path),
+        )
+
+    
+    @staticmethod
+    def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+        parser = argparse.ArgumentParser(description="Generate parallelogram puzzles")
+        parser.add_argument("count", type=int, help="Number of puzzles to create")
+        parser.add_argument("--output-dir", type=Path, default=Path("data/parallelogram"))
+        parser.add_argument("--canvas-width", type=int, default=480)
+        parser.add_argument("--aspect", type=float, default=None)
+        parser.add_argument("--seed", type=int, default=None)
+        parser.add_argument("--prompt", type=str, default=None)
+        return parser.parse_args(argv)
+
+    @staticmethod
+    def main(cls: PointTargetPuzzleGenerator, argv: Optional[List[str]] = None) -> None:
+        args = cls._parse_args(argv)
+        generator = cls(
+            output_dir=args.output_dir,
+            canvas_width=args.canvas_width,
+            aspect=args.aspect,
+            seed=args.seed,
+            prompt=args.prompt,
+        )
+        records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
+        generator.write_metadata(records, Path(args.output_dir) / "puzzles.json")
 
 
 class PointTargetPuzzleEvaluator(AbstractPuzzleEvaluator):
@@ -386,6 +482,60 @@ class PointTargetPuzzleEvaluator(AbstractPuzzleEvaluator):
         )
         return mask.astype(np.float32)
 
+    def evaluate(
+        self,
+        puzzle_id: str,
+        candidate_image: PathLike,
+        *,
+        video_sample_stride: int = 5,
+    ) -> AbstractPuzzleEvaluator.OptionEvaluationResult:
+        record = self.get_record(puzzle_id)
+        correct = str(record.get("correct_option", "")).strip().upper()
+        if not correct or len(correct) != 1:
+            raise ValueError("Puzzle record missing valid 'correct_option' (single letter)")
+
+        candidate_path = Path(candidate_image)
+        attempt_dir = candidate_path.parent
+
+        transcript_option = self.transcript_option_from_attempt(attempt_dir)
+        text_option = self.text_option_from_attempt(attempt_dir)
+        video_option = self.video_option_from_attempt(attempt_dir, record, video_sample_stride)
+        image_option, red_pixel_count, red_centroid = self.image_option_from_path(candidate_path, record)
+
+        result = AbstractPuzzleEvaluator.OptionEvaluationResult(
+            puzzle_id=puzzle_id,
+            correct_option=correct,
+            transcribe_option=transcript_option,
+            video_option=video_option,
+            image_option=image_option,
+            text_option=text_option,
+            attempt_dir=attempt_dir.as_posix(),
+        )
+        result.red_pixel_count = red_pixel_count
+        result.red_centroid = red_centroid
+        return result
+    
+    @staticmethod
+    def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+        parser = argparse.ArgumentParser(description="Evaluate point target puzzles")
+        parser.add_argument("metadata", type=Path)
+        parser.add_argument("puzzle_id", type=str)
+        parser.add_argument("candidate", type=Path)
+        parser.add_argument("--base-dir", type=Path, default=None)
+        parser.add_argument("--video-stride", dest="video_sample_stride", type=int, default=5)
+        return parser.parse_args(argv)
+
+
+    @staticmethod
+    def main(argv: Optional[list[str]] = None) -> None:
+        args = PointTargetPuzzleEvaluator._parse_args(argv)
+        evaluator = PointTargetPuzzleEvaluator(args.metadata, base_dir=args.base_dir)
+        result = evaluator.evaluate(
+            args.puzzle_id,
+            args.candidate,
+            video_sample_stride=args.video_sample_stride,
+        )
+        print(json.dumps(result.to_dict(), indent=2))
 
 __all__ = [
     "PointCandidate",

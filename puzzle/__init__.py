@@ -104,10 +104,6 @@ from .ray_intersection import (
     RayIntersectionEvaluator,
 )
 
-from .midpoint import (
-    MidpointGenerator,
-    MidpointEvaluator,
-)
 
 # Arc connection (speak option via NATO)
 from .arc_connect import (

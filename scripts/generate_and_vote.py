@@ -14,7 +14,7 @@ GENERATOR_MODULES = {
 }
 for dirpath, dirnames, filenames in os.walk('puzzle'):
     for dirname in dirnames:
-        if os.path.exists(os.path.join(dirpath, dirname, '__init__.py')) and os.path.exists(os.path.join(dirpath, dirname, 'generator.py')):
+        if os.path.exists(os.path.join(dirpath, dirname, 'generator.py')) and os.path.exists(os.path.join(dirpath, dirname, 'generator.py')):
             GENERATOR_MODULES[dirname] = f"puzzle.{dirname}.generator"
 
 

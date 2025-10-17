@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import subprocess
 import sys
@@ -119,9 +120,7 @@ class AbstractPuzzleGenerator(ABC, Generic[RecordT]):
 
         if hasattr(record, "to_dict"):
             return getattr(record, "to_dict")()
-        raise TypeError(
-            "Puzzle record must implement to_dict() or override record_to_dict() in the generator."
-        )
+        return dataclasses.asdict(record)
 
     def relativize_path(self, path: Path) -> str:
         """Map an absolute path into the generator output directory when possible."""

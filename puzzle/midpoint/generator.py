@@ -66,7 +66,7 @@ class MidpointPuzzleRecord:
 CandidatePoint = PointCandidate
 
 
-class MidpointGenerator(PointTargetPuzzleGenerator[MidpointPuzzleRecord]):
+class MidpointGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles that hide the midpoint of a segment."""
 
     def __init__(
@@ -100,22 +100,20 @@ class MidpointGenerator(PointTargetPuzzleGenerator[MidpointPuzzleRecord]):
 
     def create_puzzle(self, *, puzzle_id: Optional[str] = None) -> MidpointPuzzleRecord:
         midpoint = self.pick_target_point()
-        segment = self._build_segment(midpoint)
+        segment = self._build_segment(midpoint.to_list())
         point_radius = self.point_radius
-        candidates, correct_label = self.place_candidates(midpoint)
+        self.place_candidates(midpoint)
 
         pid = puzzle_id or str(uuid.uuid4())
         puzzle_img = self._render(
-            midpoint=midpoint,
+            midpoint=midpoint.to_list(),
             segment=segment,
-            candidates=candidates,
             highlight_label=None,
         )
         solution_img = self._render(
-            midpoint=midpoint,
+            midpoint=midpoint.to_list(),
             segment=segment,
-            candidates=candidates,
-            highlight_label=correct_label,
+            highlight_label=self.correct_label,
         )
 
         puzzle_path = self.puzzle_dir / f"{pid}_puzzle.png"
@@ -128,11 +126,11 @@ class MidpointGenerator(PointTargetPuzzleGenerator[MidpointPuzzleRecord]):
             prompt=self.prompt,
             canvas_dimensions=self.canvas_dimensions,
             margin=self.margin,
-            midpoint=midpoint,
+            midpoint=midpoint.to_list(),
             segment=segment,
-            candidates=candidates,
+            candidates=self.candidates,
             point_radius=point_radius,
-            correct_option=correct_label,
+            correct_option=self.correct_label,
             puzzle_image_path=self.relativize_path(puzzle_path),
             solution_image_path=self.relativize_path(solution_path),
         )
@@ -185,7 +183,6 @@ class MidpointGenerator(PointTargetPuzzleGenerator[MidpointPuzzleRecord]):
         *,
         midpoint: Tuple[float, float],
         segment: Segment,
-        candidates: Sequence[PointCandidate],
         highlight_label: Optional[str],
     ) -> Image.Image:
         width, height = self.canvas_dimensions
@@ -230,7 +227,6 @@ class MidpointGenerator(PointTargetPuzzleGenerator[MidpointPuzzleRecord]):
 
         self.draw_candidates(
             draw,
-            candidates=candidates,
             highlight_label=highlight_label,
         )
 

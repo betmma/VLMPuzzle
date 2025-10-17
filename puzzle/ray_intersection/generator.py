@@ -71,7 +71,7 @@ class RayIntersectionPuzzleRecord:
 CandidatePoint = PointCandidate
 
 
-class RayIntersectionGenerator(PointTargetPuzzleGenerator[RayIntersectionPuzzleRecord]):
+class RayIntersectionGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles with partially hidden ray intersections."""
 
     def __init__(
@@ -104,22 +104,21 @@ class RayIntersectionGenerator(PointTargetPuzzleGenerator[RayIntersectionPuzzleR
 
     def create_puzzle(self, *, puzzle_id: Optional[str] = None) -> RayIntersectionPuzzleRecord:
         intersection = self.pick_target_point()
-        rays = self._build_rays(intersection)
+        rays = self._build_rays(intersection.to_list())
         point_radius = self.point_radius
-        candidates, correct_label = self.place_candidates(intersection)
+        self.place_candidates(intersection)
+        intersection=intersection.to_list()
 
         pid = puzzle_id or str(uuid.uuid4())
         puzzle_img = self._render(
             intersection=intersection,
             rays=rays,
-            candidates=candidates,
             highlight_label=None,
         )
         solution_img = self._render(
             intersection=intersection,
             rays=rays,
-            candidates=candidates,
-            highlight_label=correct_label,
+            highlight_label=self.correct_label,
         )
 
         puzzle_path = self.puzzle_dir / f"{pid}_puzzle.png"
@@ -134,9 +133,9 @@ class RayIntersectionGenerator(PointTargetPuzzleGenerator[RayIntersectionPuzzleR
             margin=self.margin,
             intersection=intersection,
             rays=rays,
-            candidates=candidates,
+            candidates=self.candidates,
             point_radius=point_radius,
-            correct_option=correct_label,
+            correct_option=self.correct_label,
             puzzle_image_path=self.relativize_path(puzzle_path),
             solution_image_path=self.relativize_path(solution_path),
         )
@@ -232,7 +231,6 @@ class RayIntersectionGenerator(PointTargetPuzzleGenerator[RayIntersectionPuzzleR
         *,
         intersection: Tuple[float, float],
         rays: Sequence[RaySegment],
-        candidates: Sequence[PointCandidate],
         highlight_label: Optional[str],
     ) -> Image.Image:
         width, height = self.canvas_dimensions
@@ -254,7 +252,6 @@ class RayIntersectionGenerator(PointTargetPuzzleGenerator[RayIntersectionPuzzleR
 
         self.draw_candidates(
             draw,
-            candidates=candidates,
             highlight_label=highlight_label,
         )
 
