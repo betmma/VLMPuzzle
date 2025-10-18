@@ -161,6 +161,25 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
         x = center_x + jitter_x
         y = center_y + jitter_y
         return Point(x, y)
+    
+    def place_candidates_line(self,true_point: Point,angle:float|None=None)->None:
+        radius = self.point_radius
+        base_x, base_y = true_point.x, true_point.y
+        labels = list(self.option_labels)
+        correct_index = self._rng.randint(0, len(labels)-1)
+        correct_label = labels[correct_index]
+        candidates: List[PointCandidate] = []
+        target_count = len(labels)
+        spread = max(18.0, 0.9 * radius)
+        if angle is None:
+            angle = self._rng.uniform(0.0, math.tau)
+        dx,dy=math.cos(angle)*spread, math.sin(angle)*spread
+        for i in range(target_count):
+            cx = base_x + dx*(i-correct_index)
+            cy = base_y + dy*(i-correct_index)
+            label = labels[i]
+            candidates.append(PointCandidate(x=cx, y=cy, label=label))
+        self.candidates, self.correct_label= candidates, correct_label
 
     def place_candidates(
         self,
@@ -256,6 +275,11 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
             fill=self.CANDIDATE_OUTLINE_COLOR,
             width=self.LINE_WIDTH,
         )
+        
+    def draw_circle(self,draw,center:Point,radius:int)->None:
+        cx,cy=round(center.x), round(center.y)
+        bbox = (cx - radius, cy - radius, cx + radius, cy + radius)
+        draw.ellipse(bbox, outline=self.CANDIDATE_OUTLINE_COLOR, width=self.LINE_WIDTH)
 
     def _get_candidate_font(self) -> Any:
         if self._candidate_font is None:
