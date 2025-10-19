@@ -269,11 +269,11 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
             ty = cy - text_height + self.CANDIDATE_LABEL_OFFSET_Y
             draw.text((tx, ty), candidate.label, fill=self.CANDIDATE_TEXT_COLOR, font=font)
 
-    def draw_line(self,draw,points:List[Point])->None:
+    def draw_line(self,draw,points:List[Point],width_factor:float=1)->None:
         draw.line(
             [[round(p.x), round(p.y)] for p in points],
             fill=self.CANDIDATE_OUTLINE_COLOR,
-            width=self.LINE_WIDTH,
+            width=round(self.LINE_WIDTH*width_factor),
         )
         
     def draw_circle(self,draw,center:Point,radius:int)->None:

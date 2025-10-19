@@ -10,7 +10,7 @@ from ..point_target_base import PointTargetPuzzleGenerator, PointTargetPuzzleRec
 class PerpendicularGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles to find the center of a triangle."""
     DEFAULT_OUTPUT_DIR="data/perpendicular"
-    DEFAULT_PROMPT="Draw a line perpendicular to the existing line and passing the small circle. Speak out which option is on the line using phonetic alphabet"
+    DEFAULT_PROMPT="Draw a line perpendicular to the existing line and passing the small circle. Speak out which option is on the line using phonetic alphabet and mark that red."
     DEFAULT_GPT5_PROMPT="Which option is the center of the triangle? Answer an option in A-E."
 
     def create_puzzle(self) -> PointTargetPuzzleRecord:

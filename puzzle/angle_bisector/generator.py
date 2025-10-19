@@ -16,7 +16,7 @@ def mid_angle(angle1: float, angle2: float) -> float:
 class AngleBisectorGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles to find the center of a triangle."""
     DEFAULT_OUTPUT_DIR="data/angle_bisector"
-    DEFAULT_PROMPT="Draw a line bisecting the angle. Speak out which option is on the bisector using phonetic alphabet"
+    DEFAULT_PROMPT="Draw a line bisecting the angle. Speak out which option is on the bisector using phonetic alphabet and mark that red."
     DEFAULT_GPT5_PROMPT="Which option is on the bisector of the angle? Answer an option in A-E."
 
     def create_puzzle(self) -> PointTargetPuzzleRecord:

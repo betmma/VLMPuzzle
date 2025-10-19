@@ -46,7 +46,7 @@ def _infer_puzzle_type(vote_run_directory: Optional[str]) -> str:
     name = path.name
     if not name:
         return "unknown"
-    prefix = name.split("_", 1)[0]
+    prefix = "_".join(name.split("_")[:-3]) # prefix_date_time
     return prefix or "unknown"
 
 
