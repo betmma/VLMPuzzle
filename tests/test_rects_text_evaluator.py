@@ -21,7 +21,7 @@ class RectsEvaluatorTextTests(unittest.TestCase):
                 {"z": 1, "color": [149, 68, 229]},
                 {"z": 0, "color": [149, 229, 68]},
             ],
-            "puzzle_image_path": "puzzles/rect-test_puzzle.png",
+            "image": "puzzles/rect-test_puzzle.png",
             "solution_image_path": "solutions/rect-test_solution.png",
             "canvas_dimensions": [384, 384],
         }

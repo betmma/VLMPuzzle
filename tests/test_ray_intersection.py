@@ -26,7 +26,7 @@ def test_ray_intersection_generator_outputs():
     for candidate in record.candidates:
         assert 0 <= candidate.x <= canvas_width
         assert 0 <= candidate.y <= canvas_height
-    puzzle_path = output_root / record.puzzle_image_path
+    puzzle_path = output_root / record.image
     solution_path = output_root / record.solution_image_path
     assert puzzle_path.exists()
     assert solution_path.exists()
@@ -54,7 +54,7 @@ def test_ray_intersection_evaluator_red_detection(tmp_path):
         "intersection": [120.0, 120.0],
         "margin": 12,
         "prompt": "dummy",
-        "puzzle_image_path": "puzzles/x.png",
+        "image": "puzzles/x.png",
         "solution_image_path": "solutions/x.png",
     }
     metadata_path.write_text(json.dumps([record]), encoding="utf-8")

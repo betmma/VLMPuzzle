@@ -81,7 +81,7 @@ class ArcPuzzleRecord:
     task_id: str
     task_path: str
     prompt: str
-    puzzle_image_path: str
+    image: str
     solution_image_path: str
     cell_size: int
     placements: List[GridPlacement]
@@ -95,7 +95,7 @@ class ArcPuzzleRecord:
             "task_id": self.task_id,
             "task_path": self.task_path,
             "prompt": self.prompt,
-            "puzzle_image_path": self.puzzle_image_path,
+            "image": self.image,
             "solution_image_path": self.solution_image_path,
             "cell_size": self.cell_size,
             "placements": [placement.to_dict() for placement in self.placements],
@@ -172,7 +172,7 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
             task_id=task_file.stem,
             task_path=task_rel_path,
             prompt=self.prompt,
-            puzzle_image_path=self.relativize_path(puzzle_path),
+            image=self.relativize_path(puzzle_path),
             solution_image_path=self.relativize_path(solution_path),
             cell_size=self.cell_size,
             placements=placements,
@@ -402,7 +402,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         prompt=args.prompt,
         seed=args.seed,
     )
-    metadata_path = args.metadata or (generator.output_dir / "puzzles.json")
+    metadata_path = args.metadata or (generator.output_dir / "data.json")
     records = generator.generate_dataset(args.count, metadata_path=metadata_path, append=True)
     print(f"Generated {len(records)} ARC puzzles -> {metadata_path}")
 

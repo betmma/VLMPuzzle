@@ -15,7 +15,7 @@ class MazeEvaluatorTests(unittest.TestCase):
         self.generator = MazeGenerator(output_dir=self.output_dir, rows=11, cols=11, cell_size=24, seed=42)
         self.record = self.generator.create_puzzle(puzzle_id="maze-test")
 
-        metadata_path = self.output_dir / "puzzles.json"
+        metadata_path = self.output_dir / "data.json"
         metadata_path.write_text(json.dumps([self.record.to_dict()]), encoding="utf-8")
         self.metadata_path = metadata_path
         self.evaluator = MazeEvaluator(metadata_path)
@@ -64,8 +64,8 @@ class MazeEvaluatorTests(unittest.TestCase):
         self.assertIn("overlaps walls", result.message)
 
     def test_missing_path_fails(self) -> None:
-        puzzle_image_path = self.output_dir / self.record.puzzle_image_path
-        result = self.evaluator.evaluate(self.record.id, puzzle_image_path)
+        image = self.output_dir / self.record.image
+        result = self.evaluator.evaluate(self.record.id, image)
         self.assertFalse(result.connected)
         self.assertFalse(result.touches_goal)
 

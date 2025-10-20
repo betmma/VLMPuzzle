@@ -163,7 +163,7 @@ def main() -> None:
         seed=args.seed,
     )
 
-    metadata_path = args.metadata or (generator.output_dir / "puzzles.json")
+    metadata_path = args.metadata or (generator.output_dir / "data.json")
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
 
     task_paths = sorted(dataset_dir.rglob("*.json"))
@@ -180,7 +180,7 @@ def main() -> None:
         record_dict["difficulty"] = difficulty
         # Optionally pad images to desired aspect ratio by extending canvas
         if args.aspect_ratio:
-            puzzle_path = (generator.output_dir / record_dict["puzzle_image_path"]).resolve()
+            puzzle_path = (generator.output_dir / record_dict["image"]).resolve()
             solution_path = (generator.output_dir / record_dict["solution_image_path"]).resolve()
             padded_puzzle = _pad_image_to_aspect(puzzle_path, args.aspect_ratio)
             padded_solution = _pad_image_to_aspect(solution_path, args.aspect_ratio)

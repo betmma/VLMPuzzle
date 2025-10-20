@@ -55,7 +55,7 @@ class PointTargetPuzzleRecord:
     margin: int
     candidates: List[PointCandidate]
     correct_option: str
-    puzzle_image_path: str
+    image: str
     solution_image_path: str
 
 class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
@@ -316,7 +316,7 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
             margin=self.margin,
             candidates=self.candidates,
             correct_option=self.correct_label,
-            puzzle_image_path=self.relativize_path(self.puzzle_path),
+            image=self.relativize_path(self.puzzle_path),
             solution_image_path=self.relativize_path(self.solution_path),
         )
 
@@ -344,7 +344,7 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
             prompt=cls.DEFAULT_GPT5_PROMPT if args.use_gpt_5 and not args.prompt else args.prompt,
         )
         records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
-        generator.write_metadata(records, generator.output_dir / "puzzles.json")
+        generator.write_metadata(records, generator.output_dir / "data.json")
 
 
 class PointTargetPuzzleEvaluator(AbstractPuzzleEvaluator):

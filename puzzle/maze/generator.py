@@ -37,7 +37,7 @@ class MazePuzzleRecord:
     cell_bboxes: List[List[Tuple[int, int, int, int]]]
     padding: Tuple[int, int, int, int]
     canvas_dimensions: Tuple[int, int]
-    puzzle_image_path: str
+    image: str
     solution_image_path: str
 
     def to_dict(self) -> dict:
@@ -54,7 +54,7 @@ class MazePuzzleRecord:
             ],
             "padding": list(self.padding),
             "canvas_dimensions": list(self.canvas_dimensions),
-            "puzzle_image_path": self.puzzle_image_path,
+            "image": self.image,
             "solution_image_path": self.solution_image_path,
         }
 
@@ -133,7 +133,7 @@ class MazeGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
             cell_bboxes=cell_bboxes,
             padding=(pad_left, pad_top, pad_right, pad_bottom),
             canvas_dimensions=canvas_dims,
-            puzzle_image_path=self.relativize_path(puzzle_path),
+            image=self.relativize_path(puzzle_path),
             solution_image_path=self.relativize_path(solution_path),
         )
 
@@ -357,7 +357,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         aspect_ratio=args.aspect_ratio,
         seed=args.seed,
     )
-    metadata_path = generator.output_dir / "puzzles.json"
+    metadata_path = generator.output_dir / "data.json"
     generator.generate_dataset(args.count, metadata_path=metadata_path)
 
 

@@ -63,9 +63,9 @@ def process_puzzle(
     if not prompt:
         raise ValueError(f"Puzzle {puzzle_id} has no prompt text")
 
-    puzzle_img_rel = record.get("puzzle_image_path")
+    puzzle_img_rel = record.get("image")
     if not isinstance(puzzle_img_rel, str) or not puzzle_img_rel:
-        raise ValueError(f"Puzzle {puzzle_id} missing puzzle_image_path")
+        raise ValueError(f"Puzzle {puzzle_id} missing image")
     puzzle_img = resolve_image_path(metadata_path, puzzle_img_rel)
     if not puzzle_img.exists():
         raise FileNotFoundError(f"Puzzle image not found: {puzzle_img}")
@@ -190,7 +190,7 @@ def summarize_vote_root(
         # no_change=all(all(i==5 for i in j)for j in result['predicted_grid']) # white is predicted as 5, so all white = all 5 means no change
         try:
             record = evaluator.get_record(puzzle_id)
-            puzzle_img_path = evaluator.resolve_path(record.get("puzzle_image_path"))
+            puzzle_img_path = evaluator.resolve_path(record.get("image"))
             puzzle_img = Image.open(puzzle_img_path).convert("RGB")
             candidate_img = Image.open(result_path).convert("RGB")
             # Align candidate to the puzzle composite size
@@ -242,7 +242,7 @@ def parse_args(argv = None) -> argparse.Namespace:
     parser.add_argument("m", type=int, help="1-based start index (inclusive)")
     parser.add_argument("n", type=int, help="1-based end index (inclusive)")
     parser.add_argument("k", type=int, help="Number of responses per puzzle")
-    parser.add_argument("--metadata", type=Path, default=Path("data/arcagi/puzzles.json"))
+    parser.add_argument("--metadata", type=Path, default=Path("data/arcagi/data.json"))
     parser.add_argument("--vote-root", type=Path, default=Path("data/voteOutputArcagi"))
     parser.add_argument("--summarize", action="store_true", help="Only summarize existing evaluations under --vote-root and exit.")
     parser.add_argument(
@@ -322,9 +322,9 @@ def main(argv = None) -> None:
         prompt = (record.get("prompt") or "").strip()
         if not prompt:
             raise ValueError(f"Puzzle {pid} has no prompt text")
-        img_rel = record.get("puzzle_image_path")
+        img_rel = record.get("image")
         if not isinstance(img_rel, str) or not img_rel:
-            raise ValueError(f"Puzzle {pid} missing puzzle_image_path")
+            raise ValueError(f"Puzzle {pid} missing image")
         img_path = resolve_image_path(metadata_path, img_rel)
         if not img_path.exists():
             raise FileNotFoundError(f"Puzzle image not found: {img_path}")

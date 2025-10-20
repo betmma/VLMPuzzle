@@ -114,7 +114,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Re-evaluate vote outputs for a puzzle type")
     parser.add_argument("puzzle_type", type=str, help="Puzzle type name (e.g. ray_intersection)")
     parser.add_argument("input_vote_root", type=Path, help="Existing vote output directory to re-evaluate")
-    parser.add_argument("--metadata", type=Path, default=None, help="Puzzle metadata JSON path (default: data/<puzzle_type>/puzzles.json)")
+    parser.add_argument("--metadata", type=Path, default=None, help="Puzzle metadata JSON path (default: data/<puzzle_type>/data.json)")
     parser.add_argument("--base-dir", type=Path, default=None, help="Optional override for evaluator base directory")
     parser.add_argument("--output-root", type=Path, default=None, help="Destination vote output directory (default: create timestamped sibling)")
     parser.add_argument("--no-copy-result-image", action="store_true", help="Skip copying result images into the new vote output")
@@ -136,7 +136,7 @@ def main(argv: Optional[Iterator[str]] = None) -> None:
     output_root = args.output_root.resolve() if args.output_root else _default_output_root(input_vote_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
-    metadata_path = args.metadata if args.metadata else (REPO_ROOT / "data" / puzzle_type / "puzzles.json")
+    metadata_path = args.metadata if args.metadata else (REPO_ROOT / "data" / puzzle_type / "data.json")
     metadata_resolved = metadata_path.resolve()
     if not metadata_resolved.exists():
         raise FileNotFoundError(f"Metadata file not found: {metadata_resolved.as_posix()}")

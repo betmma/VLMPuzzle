@@ -15,7 +15,7 @@ class SudokuEvaluatorTests(unittest.TestCase):
         self.generator = SudokuGenerator(output_dir=self.output_dir, clue_target=30, seed=123, canvas_size=360)
         self.record = self.generator.create_puzzle(puzzle_id="sudoku-test")
 
-        metadata_path = self.output_dir / "puzzles.json"
+        metadata_path = self.output_dir / "data.json"
         metadata_path.write_text(json.dumps([self.record.to_dict()]), encoding="utf-8")
         self.metadata_path = metadata_path
         self.evaluator = SudokuEvaluator(metadata_path)

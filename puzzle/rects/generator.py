@@ -60,7 +60,7 @@ class RectsPuzzleRecord:
     canvas_dimensions: Tuple[int, int]
     rectangles: List[RectSpec]
     color_palette: List[PaletteEntry]
-    puzzle_image_path: str
+    image: str
     solution_image_path: str
 
     def to_dict(self) -> dict:
@@ -72,7 +72,7 @@ class RectsPuzzleRecord:
             "color_palette": [
                 {"name": name, "color": list(color)} for name, color in self.color_palette
             ],
-            "puzzle_image_path": self.puzzle_image_path,
+            "image": self.image,
             "solution_image_path": self.solution_image_path,
         }
 
@@ -157,7 +157,7 @@ class RectsGenerator(AbstractPuzzleGenerator[RectsPuzzleRecord]):
             canvas_dimensions=self.canvas_dimensions,
             rectangles=rects,
             color_palette=list(self._active_palette),
-            puzzle_image_path=self.relativize_path(puzzle_path),
+            image=self.relativize_path(puzzle_path),
             solution_image_path=self.relativize_path(solution_path),
         )
 
@@ -497,7 +497,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         prompt=args.prompt
     )
     records = [gen.create_random_puzzle() for _ in range(max(1, args.count))]
-    gen.write_metadata(records, Path(args.output_dir) / "puzzles.json")
+    gen.write_metadata(records, Path(args.output_dir) / "data.json")
 
 
 if __name__ == "__main__":

@@ -18,14 +18,14 @@ pip install -r requirements.txt
 Run the generator CLI to download random images from https://picsum.photos, slice them into a grid, scatter the tiles, and store metadata and images on disk.
 
 ```
-python -m puzzle.jigsaw.generator 5 --rows 3 --cols 3 --size 512 512 --output-dir data/jigsaw --metadata data/jigsaw/puzzles.json --prompt "Solve the jigsaw puzzle" --seed 42
+python -m puzzle.jigsaw.generator 5 --rows 3 --cols 3 --size 512 512 --output-dir data/jigsaw --metadata data/jigsaw/data.json --prompt "Solve the jigsaw puzzle" --seed 42
 ```
 
 Key outputs per puzzle:
 
 - data/original/<id>_original.png: solved reference image.
 - data/inputs/<id>_input.png: scattered puzzle layout for the model input.
-- data/puzzles.json: metadata records with id, source URL, prompt, grid definition, per-piece bounding boxes, and scatter layout.
+- data/data.json: metadata records with id, source URL, prompt, grid definition, per-piece bounding boxes, and scatter layout.
 
 You can also build a puzzle from a local image:
 
@@ -41,7 +41,7 @@ record = gen.create_puzzle_from_path("my_image.jpg")
 Given a stored puzzle id and a candidate solution image (for example the final frame from a model), run the evaluator. It trims borders, resizes to the reference dimensions, compares per-tile similarity, and reports accuracy.
 
 ```
-python -m puzzle.jigsaw.evaluator data/puzzles.json <PUZZLE_ID> path/to/model_output.png --threshold 0.92 --trim-tolerance 10
+python -m puzzle.jigsaw.evaluator data/data.json <PUZZLE_ID> path/to/model_output.png --threshold 0.92 --trim-tolerance 10
 ```
 
 Example JSON result:
@@ -73,7 +73,7 @@ Artifacts per puzzle:
 - data/sudoku/puzzles/<id>_puzzle.png: printable puzzle grid with blanks.
 - use `--aspect-ratio` to add black padding around the outer border while keeping the inner grid square.
 - data/sudoku/solutions/<id>_solution.png: colored solution grid for reference.
-- data/sudoku/puzzles.json: metadata storing puzzle/solution grids, clue counts, and prompts.
+- data/sudoku/data.json: metadata storing puzzle/solution grids, clue counts, and prompts.
 
 Programmatic example:
 
@@ -89,7 +89,7 @@ record = gen.create_puzzle()
 Provide the evaluator with the metadata file, puzzle id, and a candidate solution image (final frame from the model or a rendered board).
 
 ```
-python -m puzzle.sudoku.evaluator data/sudoku/puzzles.json <PUZZLE_ID> candidate.png
+python -m puzzle.sudoku.evaluator data/sudoku/data.json <PUZZLE_ID> candidate.png
 ```
 
 The evaluator trims borders, rescales the candidate to the reference solution, reads the digit in each cell, and reports accuracy plus invalid positions.
@@ -105,12 +105,12 @@ Outputs:
 - add `--monochrome` to keep a single hue across all filled cells.
 - use `--aspect-ratio` to add black padding around the outer border.
 - data/mirror/solutions/<id>_solution.png: full mirrored grid reference.
-- data/mirror/puzzles.json: metadata with per-cell colors and layout details.
+- data/mirror/data.json: metadata with per-cell colors and layout details.
 
 ## Evaluating mirror outputs
 
 ```
-python -m puzzle.mirror.evaluator data/mirror/puzzles.json <PUZZLE_ID> candidate.png --color-tolerance 20
+python -m puzzle.mirror.evaluator data/mirror/data.json <PUZZLE_ID> candidate.png --color-tolerance 20
 ```
 
 Each right-half cell is compared against its mirrored counterpart by averaging RGB values and measuring color distance.
@@ -126,7 +126,7 @@ Every record stores overlapping rectangles with a defined z-order along with a p
 ## Evaluating rectangles answers
 
 ```
-python -m puzzle.rects.evaluator data/rects/puzzles.json <PUZZLE_ID> attempt/final.png --speech-mode auto --speech-engine local --whisper-model base
+python -m puzzle.rects.evaluator data/rects/data.json <PUZZLE_ID> attempt/final.png --speech-mode auto --speech-engine local --whisper-model base
 ```
 
 - The evaluator still scores the visual ordering by extracting the dominant color per band and comparing it to metadata.
@@ -145,7 +145,7 @@ python -m puzzle.rects.evaluator data/rects/puzzles.json <PUZZLE_ID> attempt/fin
 ## Generating ARC puzzles
 
 ```
-python -m puzzle.arcagi.generator 5 --dataset data/training --output-dir data/arcagi --metadata data/arcagi/puzzles.json --cell-size 28
+python -m puzzle.arcagi.generator 5 --dataset data/training --output-dir data/arcagi --metadata data/arcagi/data.json --cell-size 28
 ```
 
 Each puzzle image renders every training example as an input/output pair with an arrow pointing from example input to example output. The first evaluation pair is shown with its input grid and a blank answer grid. The matching solution image fills in the correct test output.
@@ -153,12 +153,12 @@ Each puzzle image renders every training example as an input/output pair with an
 Artifacts per puzzle:
 - data/arcagi/puzzles/<id>_puzzle.png: composite image with examples and blank test output.
 - data/arcagi/solutions/<id>_solution.png: identical layout with the correct test output filled in.
-- data/arcagi/puzzles.json: metadata that records the task source and grid placements (including the test output region).
+- data/arcagi/data.json: metadata that records the task source and grid placements (including the test output region).
 
 ## Evaluating ARC outputs
 
 ```
-python -m puzzle.arcagi.evaluator data/arcagi/puzzles.json <PUZZLE_ID> candidate.png
+python -m puzzle.arcagi.evaluator data/arcagi/data.json <PUZZLE_ID> candidate.png
 ```
 
 The evaluator aligns the candidate image to the puzzle layout, reads the coloured cells from the test output region, maps RGB values back to ARC palette digits, and compares them to the ground-truth grid.
@@ -174,12 +174,12 @@ Each maze shows black walls, a red start cell, and a green goal cell. The prompt
 Artifacts per puzzle:
 - data/maze/puzzles/<id>_puzzle.png: maze without the path.
 - data/maze/solutions/<id>_solution.png: same maze with the red reference path.
-- data/maze/puzzles.json: metadata with the maze grid, start/goal coordinates, padding, and bounding boxes for each cell.
+- data/maze/data.json: metadata with the maze grid, start/goal coordinates, padding, and bounding boxes for each cell.
 
 ## Evaluating maze outputs
 
 ```
-python -m puzzle.maze.evaluator data/maze/puzzles.json <PUZZLE_ID> candidate.png
+python -m puzzle.maze.evaluator data/maze/data.json <PUZZLE_ID> candidate.png
 ```
 
 The evaluator aligns the candidate image, checks that a continuous red path connects the start and goal cells, and verifies that no red pixels spill into wall cells.

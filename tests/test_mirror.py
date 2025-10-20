@@ -15,7 +15,7 @@ class MirrorEvaluatorTests(unittest.TestCase):
         self.output_dir = Path(self.tmp.name) / "mirror"
         self.generator = MirrorGenerator(output_dir=self.output_dir, rows=4, cols=6, cell_size=32, seed=42)
         self.record = self.generator.create_puzzle(puzzle_id="mirror-test")
-        metadata_path = self.output_dir / "puzzles.json"
+        metadata_path = self.output_dir / "data.json"
         metadata_path.write_text(json.dumps([self.record.to_dict()]), encoding="utf-8")
         self.metadata_path = metadata_path
         self.evaluator = MirrorEvaluator(metadata_path)

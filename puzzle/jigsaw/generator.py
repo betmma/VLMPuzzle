@@ -67,7 +67,7 @@ class JigsawPuzzleRecord:
     prompt: str
     image_source: str
     original_image_path: str
-    puzzle_image_path: str
+    image: str
     grid: Dict[str, int]
     piece_edges: Dict[str, List[int]]
     pieces: List[PieceSpec]
@@ -80,7 +80,7 @@ class JigsawPuzzleRecord:
             "prompt": self.prompt,
             "image_source": self.image_source,
             "original_image_path": self.original_image_path,
-            "puzzle_image_path": self.puzzle_image_path,
+            "image": self.image,
             "grid": self.grid,
             "piece_edges": {k: list(v) for k, v in self.piece_edges.items()},
             "pieces": [piece.to_dict() for piece in self.pieces],
@@ -151,7 +151,7 @@ class JigsawGenerator(AbstractPuzzleGenerator[JigsawPuzzleRecord]):
             prompt=self.prompt,
             image_source=image_source,
             original_image_path=self.relativize_path(original_path),
-            puzzle_image_path=self.relativize_path(input_path),
+            image=self.relativize_path(input_path),
             grid={"rows": self.rows, "cols": self.cols},
             piece_edges=piece_edges,
             pieces=[piece_spec for piece_spec, _ in pieces],
@@ -320,7 +320,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--metadata",
         type=Path,
         default=None,
-        help="Optional metadata JSON path (defaults to <output>/puzzles.json)",
+        help="Optional metadata JSON path (defaults to <output>/data.json)",
     )
     parser.add_argument(
         "--prompt",
@@ -356,7 +356,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 def main(argv: Optional[List[str]] = None) -> None:
     args = _parse_args(argv)
-    metadata_path = args.metadata or (args.output_dir / "puzzles.json")
+    metadata_path = args.metadata or (args.output_dir / "data.json")
     generator = JigsawGenerator(
         output_dir=args.output_dir,
         rows=args.rows,

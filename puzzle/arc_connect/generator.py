@@ -64,7 +64,7 @@ class ArcConnectPuzzleRecord:
     left_arc: CircleSpec
     candidates: List[CandidateArc]
     correct_option: str
-    puzzle_image_path: str
+    image: str
     solution_image_path: str
 
     def to_dict(self) -> dict:
@@ -77,7 +77,7 @@ class ArcConnectPuzzleRecord:
             "left_arc": self.left_arc.to_dict(),
             "candidates": [c.to_dict() for c in self.candidates],
             "correct_option": self.correct_option,
-            "puzzle_image_path": self.puzzle_image_path,
+            "image": self.image,
             "solution_image_path": self.solution_image_path,
             "type": "arc_connect",
         }
@@ -227,7 +227,7 @@ class ArcConnectGenerator(AbstractPuzzleGenerator[ArcConnectPuzzleRecord]):
             left_arc=base,
             candidates=candidates,
             correct_option=correct_label or "A",
-            puzzle_image_path=self.relativize_path(puzzle_path),
+            image=self.relativize_path(puzzle_path),
             solution_image_path=self.relativize_path(solution_path),
         )
 
@@ -447,7 +447,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         prompt=args.prompt,
     )
     records = [gen.create_random_puzzle() for _ in range(max(1, args.count))]
-    gen.write_metadata(records, Path(args.output_dir) / "puzzles.json")
+    gen.write_metadata(records, Path(args.output_dir) / "data.json")
 
 
 if __name__ == "__main__":

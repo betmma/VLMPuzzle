@@ -42,7 +42,7 @@ class MirrorPuzzleRecord:
     cell_aspect_ratio: float
     canvas_size: Tuple[int, int]
     colored_cells: List[CellColor]
-    puzzle_image_path: str
+    image: str
     solution_image_path: str
     monochrome: bool
 
@@ -60,7 +60,7 @@ class MirrorPuzzleRecord:
             "cell_aspect_ratio": self.cell_aspect_ratio,
             "canvas_size": list(self.canvas_size),
             "colored_cells": [cell.to_dict() for cell in self.colored_cells],
-            "puzzle_image_path": self.puzzle_image_path,
+            "image": self.image,
             "solution_image_path": self.solution_image_path,
             "monochrome": self.monochrome,
         }
@@ -175,7 +175,7 @@ class MirrorGenerator(AbstractPuzzleGenerator[MirrorPuzzleRecord]):
             cell_aspect_ratio=self.cell_aspect_ratio,
             canvas_size=self.canvas_size,
             colored_cells=colored_cells,
-            puzzle_image_path=self.relativize_path(puzzle_path),
+            image=self.relativize_path(puzzle_path),
             solution_image_path=self.relativize_path(solution_path),
             monochrome=self.monochrome,
         )
@@ -287,7 +287,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         prompt=args.prompt,
         seed=args.seed,
     )
-    metadata_path = generator.output_dir / "puzzles.json"
+    metadata_path = generator.output_dir / "data.json"
     generator.generate_dataset(args.count, metadata_path=metadata_path)
 
 

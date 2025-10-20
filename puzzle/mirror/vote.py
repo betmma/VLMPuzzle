@@ -77,7 +77,7 @@ def classify_monochrome_prediction(
 
 
 def load_metadata(data_root: Path) -> Dict[str, Dict[str, Any]]:
-    metadata_path = data_root / "mirror" / "puzzles.json"
+    metadata_path = data_root / "mirror" / "data.json"
     if not metadata_path.exists():
         return {}
     try:

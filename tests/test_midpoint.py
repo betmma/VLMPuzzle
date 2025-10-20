@@ -29,7 +29,7 @@ def test_midpoint_generator_outputs(tmp_path):
     assert abs(mid_x - midpoint[0]) < 1e-3
     assert abs(mid_y - midpoint[1]) < 1e-3
 
-    puzzle_path = output_root / record.puzzle_image_path
+    puzzle_path = output_root / record.image
     solution_path = output_root / record.solution_image_path
     assert puzzle_path.exists()
     assert solution_path.exists()
@@ -56,7 +56,7 @@ def test_midpoint_evaluator_end_to_end(tmp_path):
             {"label": "D", "x": 140.0, "y": 120.0},
             {"label": "E", "x": 120.0, "y": 140.0},
         ],
-        "puzzle_image_path": "puzzles/demo.png",
+        "image": "puzzles/demo.png",
         "solution_image_path": "solutions/demo.png",
         "prompt": "dummy",
         "margin": 12,

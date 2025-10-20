@@ -18,9 +18,9 @@ def _load_puzzle(puzzles_path: str, puzzle_id: str) -> Dict[str, Any]:
     raise ValueError(f"Puzzle {puzzle_id} not found in {puzzles_path}")
 
 
-def _resolve_image_path(puzzles_path: str, puzzle_image_path: str) -> str:
+def _resolve_image_path(puzzles_path: str, image: str) -> str:
     puzzles_dir = os.path.dirname(puzzles_path)
-    full_path = os.path.join(puzzles_dir, puzzle_image_path)
+    full_path = os.path.join(puzzles_dir, image)
     return os.path.abspath(full_path)
 
 
@@ -66,16 +66,19 @@ def _prepare_vote_run_dir(puzzle_type: str, puzzle_id: str) -> str:
 def run_generations_for_puzzle(
     puzzle_id: str,
     attempts: int = 3,
-    puzzles_path: str = "data/mirror/puzzles.json",
+    puzzles_path: str = "data/mirror/data.json",
     use_gpt_5: bool = False,
 ) -> List[Dict[str, Any]]:
     """Generate multiple video attempts for a mirror puzzle and evaluate each result."""
     puzzle = _load_puzzle(puzzles_path, puzzle_id)
-    image_path = _resolve_image_path(puzzles_path, puzzle["puzzle_image_path"])
+    image_path = _resolve_image_path(puzzles_path, puzzle["image"])
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"Puzzle image not found at {image_path}")
 
-    prompt = puzzle.get("prompt", "").strip()
+    key='prompt'
+    if use_gpt_5 and 'gpt5_prompt' in puzzle:
+        key='gpt5_prompt'
+    prompt = puzzle.get(key, "").strip()
     if not prompt:
         raise ValueError(f"Puzzle {puzzle_id} has no prompt text")
 
@@ -137,7 +140,7 @@ if __name__ == "__main__":
     PUZZLE_TYPE = sys.argv[1]
     puzzle_id_arg = sys.argv[2]
     attempts_arg = int(sys.argv[3]) if len(sys.argv) > 3 else 3
-    puzzles_path_arg = sys.argv[4] if len(sys.argv) > 4 else f"data/{PUZZLE_TYPE}/puzzles.json"
+    puzzles_path_arg = sys.argv[4] if len(sys.argv) > 4 else f"data/{PUZZLE_TYPE}/data.json"
     use_gpt_5 = sys.argv[5].lower() == "true" if len(sys.argv) > 5 else False
 
     all_results = run_generations_for_puzzle(

@@ -148,7 +148,7 @@ class JigsawEvaluator(AbstractPuzzleEvaluator):
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate a puzzle solution image")
-    parser.add_argument("metadata", type=Path, help="Path to puzzles.json")
+    parser.add_argument("metadata", type=Path, help="Path to data.json")
     parser.add_argument("puzzle_id", type=str, help="Puzzle identifier to evaluate")
     parser.add_argument("candidate", type=Path, help="Image produced by the model")
     parser.add_argument(

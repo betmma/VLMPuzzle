@@ -1,35 +1,35 @@
 #!/bin/bash
 
-# This script runs the generate_and_vote.py script for a list of puzzle types.
+# This script runs the generate.py script for a list of puzzle types.
 
 # Define an array of all the puzzle names to process
 PUZZLES=(
-    # "ray_intersection"
-    # "midpoint"
-    # "parallelogram"
-    # "circle_center"
-    # "incenter"
-    # "circumcenter"
-    # "triangle_center"
-    # "perpendicular"
-    # "angle_bisector"
-    # "parallel"
-    # "perpendicular_bisector"
-    # "orthocenter"
-    # "reflection"
-    # "ray_reflect"
-    # "right_triangle"
-    # "square_outlier"
-    # "fermat_point"
+    "ray_intersection"
+    "midpoint"
+    "parallelogram"
+    "circle_center"
+    "incenter"
+    "circumcenter"
+    "triangle_center"
+    "perpendicular"
+    "angle_bisector"
+    "parallel"
+    "perpendicular_bisector"
+    "orthocenter"
+    "reflection"
+    "ray_reflect"
+    "right_triangle"
+    "square_outlier"
+    "fermat_point"
     "isosceles_trapezoid"
     "circle_tangent_point"
     "circle_tangent_line"
 )
 
 # Common arguments for the script
-NUM_PUZZLES=10
-ATTEMPTS=1
-GEN_OPTS="--generator-option canvas-width=480 --generator-option aspect=0.55"
+NUM_PUZZLES=50
+GEN_OPTS="--canvas-width=480 --aspect=0.55"
+OUTPUT_DIR="dataset/"
 
 # Loop through the array and execute the command for each puzzle name
 for PUZZLE_NAME in "${PUZZLES[@]}"; do
@@ -40,7 +40,7 @@ for PUZZLE_NAME in "${PUZZLES[@]}"; do
     # Construct and run the command
     # The `set -x` command would print the command before executing it, which can be useful for debugging
     # set -x
-    python scripts/generate_and_vote.py "$PUZZLE_NAME" "$NUM_PUZZLES" --attempts "$ATTEMPTS" $GEN_OPTS
+    python -m puzzle.$PUZZLE_NAME.generator "$NUM_PUZZLES" $GEN_OPTS --output-dir "$OUTPUT_DIR/$PUZZLE_NAME"
     # set +x
     
     # Check the exit code of the last command

@@ -31,7 +31,7 @@ class JigsawEvaluatorTests(unittest.TestCase):
             image_source="synthetic",
             puzzle_id="test-puzzle",
         )
-        self.metadata_path = self.output_dir / "puzzles.json"
+        self.metadata_path = self.output_dir / "data.json"
         self.metadata_path.write_text(json.dumps([self.record.to_dict()]), encoding="utf-8")
         self.original_image_path = self.output_dir / self.record.original_image_path
         self.evaluator = JigsawEvaluator(self.metadata_path)

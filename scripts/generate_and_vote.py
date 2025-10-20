@@ -140,7 +140,7 @@ def main() -> None:
         "--metadata",
         type=Path,
         default=None,
-        help="Metadata path (must be <output-dir>/puzzles.json)",
+        help="Metadata path (must be <output-dir>/data.json)",
     )
     parser.add_argument(
         "--generator-option",
@@ -171,11 +171,11 @@ def main() -> None:
     module_name = GENERATOR_MODULES[puzzle_type]
 
     output_dir = args.output_dir or (Path("data") / puzzle_type)
-    metadata_path = args.metadata or (output_dir / "puzzles.json")
-    expected_metadata_path = output_dir / "puzzles.json"
+    metadata_path = args.metadata or (output_dir / "data.json")
+    expected_metadata_path = output_dir / "data.json"
     if metadata_path.resolve() != expected_metadata_path.resolve():
         raise ValueError(
-            "Metadata path must match <output-dir>/puzzles.json when invoking the generator CLI."
+            "Metadata path must match <output-dir>/data.json when invoking the generator CLI."
         )
 
     option_tokens = parse_generator_tokens(tuple(args.generator_option))

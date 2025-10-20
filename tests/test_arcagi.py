@@ -59,7 +59,7 @@ class ArcPuzzleIntegrationTests(unittest.TestCase):
         self.output_dir = root / "arc_puzzles"
         self.generator = ArcPuzzleGenerator(dataset_dir=self.dataset_dir, output_dir=self.output_dir, cell_size=16, seed=123)
         self.record = self.generator.create_puzzle(task_path=self.task_path, puzzle_id="arc-test")
-        metadata_path = self.output_dir / "puzzles.json"
+        metadata_path = self.output_dir / "data.json"
         metadata_path.write_text(json.dumps([self.record.to_dict()]), encoding="utf-8")
         self.metadata_path = metadata_path
         self.evaluator = ArcPuzzleEvaluator(self.metadata_path)
@@ -80,7 +80,7 @@ class ArcPuzzleIntegrationTests(unittest.TestCase):
         self.assertEqual(result.predicted_grid, self.record.test_output)
 
     def test_blank_puzzle_image_scores_lower_accuracy(self) -> None:
-        puzzle_path = (self.output_dir / self.record.puzzle_image_path).resolve()
+        puzzle_path = (self.output_dir / self.record.image).resolve()
         result = self.evaluator.evaluate(self.record.id, puzzle_path)
         self.assertLess(result.accuracy, 1.0)
 

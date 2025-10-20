@@ -49,7 +49,7 @@ class CircleCountPuzzleRecord:
     canvas_dimensions: Tuple[int, int]
     circle_count: int
     circles: List[CircleSpec]
-    puzzle_image_path: str
+    image: str
     solution_image_path: str
 
     def to_dict(self) -> dict:
@@ -59,7 +59,7 @@ class CircleCountPuzzleRecord:
             "canvas_dimensions": list(self.canvas_dimensions),
             "circle_count": self.circle_count,
             "circles": [circle.to_dict() for circle in self.circles],
-            "puzzle_image_path": self.puzzle_image_path,
+            "image": self.image,
             "solution_image_path": self.solution_image_path,
             "type": "circle_count",
         }
@@ -118,7 +118,7 @@ class CircleCountGenerator(AbstractPuzzleGenerator[CircleCountPuzzleRecord]):
             canvas_dimensions=self.canvas_dimensions,
             circle_count=circle_count,
             circles=circles,
-            puzzle_image_path=self.relativize_path(puzzle_path),
+            image=self.relativize_path(puzzle_path),
             solution_image_path=self.relativize_path(solution_path),
         )
 
@@ -215,7 +215,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         seed=args.seed,
     )
     records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
-    generator.write_metadata(records, Path(args.output_dir) / "puzzles.json")
+    generator.write_metadata(records, Path(args.output_dir) / "data.json")
 
 
 if __name__ == "__main__":

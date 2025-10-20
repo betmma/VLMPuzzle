@@ -48,7 +48,7 @@ class RayIntersectionPuzzleRecord:
     candidates: List[PointCandidate]
     point_radius: int
     correct_option: str
-    puzzle_image_path: str
+    image: str
     solution_image_path: str
 
     def to_dict(self) -> dict:
@@ -62,7 +62,7 @@ class RayIntersectionPuzzleRecord:
             "candidates": [c.to_dict() for c in self.candidates],
             "point_radius": self.point_radius,
             "correct_option": self.correct_option,
-            "puzzle_image_path": self.puzzle_image_path,
+            "image": self.image,
             "solution_image_path": self.solution_image_path,
             "type": "ray_intersection",
         }
@@ -111,7 +111,7 @@ class RayIntersectionGenerator(PointTargetPuzzleGenerator):
             candidates=self.candidates,
             point_radius=point_radius,
             correct_option=self.correct_label,
-            puzzle_image_path=self.relativize_path(puzzle_path),
+            image=self.relativize_path(puzzle_path),
             solution_image_path=self.relativize_path(solution_path),
         )
 
@@ -269,7 +269,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         prompt=args.prompt,
     )
     records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
-    generator.write_metadata(records, Path(args.output_dir) / "puzzles.json")
+    generator.write_metadata(records, Path(args.output_dir) / "data.json")
 
 
 if __name__ == "__main__":

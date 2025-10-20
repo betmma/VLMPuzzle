@@ -43,7 +43,7 @@ class MidpointPuzzleRecord:
     candidates: List[PointCandidate]
     point_radius: int
     correct_option: str
-    puzzle_image_path: str
+    image: str
     solution_image_path: str
 
     def to_dict(self) -> dict:
@@ -57,7 +57,7 @@ class MidpointPuzzleRecord:
             "candidates": [candidate.to_dict() for candidate in self.candidates],
             "point_radius": self.point_radius,
             "correct_option": self.correct_option,
-            "puzzle_image_path": self.puzzle_image_path,
+            "image": self.image,
             "solution_image_path": self.solution_image_path,
             "type": "midpoint",
         }
@@ -105,7 +105,7 @@ class MidpointGenerator(PointTargetPuzzleGenerator):
             candidates=self.candidates,
             point_radius=point_radius,
             correct_option=self.correct_label,
-            puzzle_image_path=self.relativize_path(puzzle_path),
+            image=self.relativize_path(puzzle_path),
             solution_image_path=self.relativize_path(solution_path),
         )
 

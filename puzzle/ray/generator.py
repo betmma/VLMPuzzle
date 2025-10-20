@@ -63,7 +63,7 @@ class RayPuzzleRecord:
     points: List[PointSpec]
     correct_option: str  # 'A'..'E'
     reflections: int
-    puzzle_image_path: str
+    image: str
     solution_image_path: str
 
     def to_dict(self) -> dict:
@@ -77,7 +77,7 @@ class RayPuzzleRecord:
             "points": [p.to_dict() for p in self.points],
             "correct_option": self.correct_option,
             "reflections": self.reflections,
-            "puzzle_image_path": self.puzzle_image_path,
+            "image": self.image,
             "solution_image_path": self.solution_image_path,
             "type": "ray",
         }
@@ -167,7 +167,7 @@ class RayGenerator(AbstractPuzzleGenerator[RayPuzzleRecord]):
                 points=points,
                 correct_option=correct_label,
                 reflections=reflections,
-                puzzle_image_path=self.relativize_path(puzzle_path),
+                image=self.relativize_path(puzzle_path),
                 solution_image_path=self.relativize_path(solution_path),
             )
 
@@ -533,7 +533,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         seed=args.seed,
     )
     records = [gen.create_random_puzzle() for _ in range(max(1, args.count))]
-    gen.write_metadata(records, Path(args.output_dir) / "puzzles.json")
+    gen.write_metadata(records, Path(args.output_dir) / "data.json")
 
 
 if __name__ == "__main__":

@@ -27,7 +27,7 @@ class SudokuPuzzleRecord:
     puzzle_grid: List[List[int]]
     solution_grid: List[List[int]]
     clue_count: int
-    puzzle_image_path: str
+    image: str
     solution_image_path: str
     cell_bboxes: List[List[Tuple[int, int, int, int]]]
     canvas_size: int
@@ -42,7 +42,7 @@ class SudokuPuzzleRecord:
             "puzzle_grid": self.puzzle_grid,
             "solution_grid": self.solution_grid,
             "clue_count": self.clue_count,
-            "puzzle_image_path": self.puzzle_image_path,
+            "image": self.image,
             "solution_image_path": self.solution_image_path,
             "cell_bboxes": [
                 [list(map(int, bbox)) for bbox in row] for row in self.cell_bboxes
@@ -155,7 +155,7 @@ class SudokuGenerator(AbstractPuzzleGenerator[SudokuPuzzleRecord]):
             puzzle_grid=puzzle,
             solution_grid=solution,
             clue_count=sum(cell != 0 for row in puzzle for cell in row),
-            puzzle_image_path=self.relativize_path(puzzle_path),
+            image=self.relativize_path(puzzle_path),
             solution_image_path=self.relativize_path(solution_path),
             cell_bboxes=cell_bboxes,
             canvas_size=self.canvas_size,
@@ -374,7 +374,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         canvas_aspect_ratio=args.aspect_ratio,
         seed=args.seed,
     )
-    metadata_path = generator.output_dir / "puzzles.json"
+    metadata_path = generator.output_dir / "data.json"
     generator.generate_dataset(args.count, metadata_path=metadata_path)
 
 
