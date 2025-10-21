@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import sys
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from veo3 import generate_video_output_multiple_tries
 from gpt5 import generate_multiple_tries
@@ -68,6 +68,7 @@ def run_generations_for_puzzle(
     attempts: int = 3,
     puzzles_path: str = "data/mirror/data.json",
     use_gpt_5: bool = False,
+    puzzle_type_override: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Generate multiple video attempts for a mirror puzzle and evaluate each result."""
     puzzle = _load_puzzle(puzzles_path, puzzle_id)
@@ -82,8 +83,10 @@ def run_generations_for_puzzle(
     if not prompt:
         raise ValueError(f"Puzzle {puzzle_id} has no prompt text")
 
-    puzzle_type = _derive_puzzle_type(puzzle, puzzles_path)
-    vote_run_dir = _prepare_vote_run_dir(puzzle_type, puzzle_id)
+    fallback_type = _derive_puzzle_type(puzzle, puzzles_path)
+    effective_type = puzzle_type_override or globals().get("PUZZLE_TYPE") or fallback_type
+
+    vote_run_dir = _prepare_vote_run_dir(effective_type, puzzle_id)
 
     results: List[Dict[str, Any]] = []
     for attempt in range(1, attempts + 1):
@@ -99,7 +102,7 @@ def run_generations_for_puzzle(
         command = [
             sys.executable,
             "-m",
-            f"puzzle.{PUZZLE_TYPE}.evaluator",
+            f"puzzle.{effective_type}.evaluator",
             puzzles_path,
             puzzle_id,
             result_png,
@@ -147,7 +150,8 @@ if __name__ == "__main__":
         puzzle_id=puzzle_id_arg,
         attempts=attempts_arg,
         puzzles_path=puzzles_path_arg,
-        use_gpt_5=use_gpt_5
+        use_gpt_5=use_gpt_5,
+        puzzle_type_override=PUZZLE_TYPE,
     )
 
     for result in all_results:

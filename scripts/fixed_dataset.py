@@ -1,10 +1,12 @@
 import argparse
 import json
 import multiprocessing as mp
+import subprocess
+import sys
+import time, os
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
-
-import mirrorVote
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 
 def _discover_puzzle_types(dataset_root: Path, requested: Sequence[str]) -> List[str]:
@@ -63,22 +65,64 @@ def _collect_jobs(
     return jobs, puzzle_dirs
 
 
-def _run_evaluation_job(task: Tuple[str, str, int, str, bool]) -> Dict[str, object]:
-    puzzle_type, puzzle_id, attempts, puzzles_path, use_gpt_5 = task
-    mirrorVote.PUZZLE_TYPE = puzzle_type
-    results = mirrorVote.run_generations_for_puzzle(
-        puzzle_id=puzzle_id,
-        attempts=attempts,
-        puzzles_path=puzzles_path,
-        use_gpt_5=use_gpt_5,
+def _sanitize_vote_component(text: str) -> str:
+    cleaned = "".join(
+        character if character.isalnum() or character in {"-", "_"} else "_"
+        for character in text.strip()
     )
+    return cleaned or "value"
+
+
+def _build_vote_key(puzzle_type: str, puzzle_id: str) -> str:
+    return _sanitize_vote_component(puzzle_type) + "_" + _sanitize_vote_component(puzzle_id)
+
+
+def _discover_completed_puzzles(vote_output_root: Path) -> Set[str]:
+    completed: Set[str] = set()
+    if not vote_output_root.exists() or not vote_output_root.is_dir():
+        return completed
+    for run_dir in vote_output_root.iterdir():
+        if not run_dir.is_dir():
+            continue
+        parts = run_dir.name.rsplit("_", 2)
+        if len(parts) != 3:
+            continue
+        prefix = parts[0]
+        if prefix and os.listdir(run_dir): # not empty
+            completed.add(prefix)
+    return completed
+
+
+def _run_evaluation_job(task: Tuple[str, str, int, str, bool], timeout: Optional[float]) -> Dict[str, object]:
+    puzzle_type, puzzle_id, attempts, puzzles_path, use_gpt_5 = task
+    command = [
+        sys.executable,
+        "scripts/mirrorVote.py",
+        puzzle_type,
+        puzzle_id,
+        str(attempts),
+        puzzles_path,
+        "true" if use_gpt_5 else "false",
+    ]
+    start = time.monotonic()
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    duration = time.monotonic() - start
     return {
         "puzzle_type": puzzle_type,
         "puzzle_id": puzzle_id,
         "attempts": attempts,
         "puzzles_path": puzzles_path,
         "use_gpt_5": use_gpt_5,
-        "results": results,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+        "command": command,
+        "elapsed_seconds": duration,
     }
 
 
@@ -106,9 +150,26 @@ def main() -> None:
         help="Parallel worker count for model runs.",
     )
     parser.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        help="Per-puzzle timeout in seconds for mirrorVote (default: no timeout).",
+    )
+    parser.add_argument(
         "--use-gpt-5",
         action="store_true",
         help="Use gpt-5 for answer generation instead of veo3.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Skip puzzles that already have vote outputs under data/voteOutput.",
+    )
+    parser.add_argument(
+        "--vote-output-root",
+        type=Path,
+        default=Path("data") / "voteOutput",
+        help="Directory containing vote outputs for previously evaluated puzzles.",
     )
     parser.add_argument(
         "--puzzle-id",
@@ -134,21 +195,44 @@ def main() -> None:
         args.use_gpt_5,
         args.puzzle_id,
     )
+    if args.resume:
+        completed = _discover_completed_puzzles(args.vote_output_root)
+        filtered_jobs = []
+        skipped = 0
+        for job in jobs:
+            puzzle_type, puzzle_id = job[0], job[1]
+            vote_key = _build_vote_key(puzzle_type, puzzle_id)
+            if vote_key in completed:
+                skipped += 1
+                continue
+            filtered_jobs.append(job)
+        jobs = filtered_jobs
+        if skipped:
+            print(f"Skipping {skipped} already evaluated puzzle(s).")
     if not jobs:
         print("No puzzles matched selection.")
         return
 
     per_type_results: Dict[str, List[Dict[str, object]]] = {key: [] for key in puzzle_dirs}
     if args.workers > 1:
-        with mp.Pool(processes=args.workers) as pool:
-            for summary in pool.imap_unordered(_run_evaluation_job, jobs):
+        pool_size = min(args.workers, len(jobs))
+        ctx = mp.get_context("spawn")
+        with ProcessPoolExecutor(max_workers=pool_size, mp_context=ctx) as executor:
+            futures = [executor.submit(_run_evaluation_job, job, args.timeout) for job in jobs]
+            completed = 0
+            total = len(futures)
+            for future in as_completed(futures):
+                summary = future.result()
                 per_type_results[summary["puzzle_type"]].append(summary)
-                print(f"{summary['puzzle_type']} {summary['puzzle_id']} complete.")
+                completed += 1
+                status = "ok" if summary["returncode"] == 0 else f"exit {summary['returncode']}"
+                print(f"{summary['puzzle_type']} {summary['puzzle_id']} {status}. ({completed}/{total})")
     else:
         for job in jobs:
-            summary = _run_evaluation_job(job)
+            summary = _run_evaluation_job(job, args.timeout)
             per_type_results[summary["puzzle_type"]].append(summary)
-            print(f"{summary['puzzle_type']} {summary['puzzle_id']} complete.")
+            status = "ok" if summary["returncode"] == 0 else f"exit {summary['returncode']}"
+            print(f"{summary['puzzle_type']} {summary['puzzle_id']} {status}.")
 
     # for puzzle_type, summaries in per_type_results.items():
     #     if not summaries:
