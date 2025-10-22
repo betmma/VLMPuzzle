@@ -1,6 +1,6 @@
 data/*
 *.pyc
 api_key.txt
-dataset/*
+dataset*/*
 debug/*
 dataset.zip

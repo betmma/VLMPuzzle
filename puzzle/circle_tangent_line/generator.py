@@ -10,7 +10,7 @@ from ..point_target_base import PointTargetPuzzleGenerator, PointTargetPuzzleRec
 class CircleTangentLineGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles that require identifying a line tangent to a circle."""
     DEFAULT_OUTPUT_DIR="data/circle_tangent_line"
-    DEFAULT_PROMPT="A line is drawn tangent to the circle at the highlighted point. Speak out which option lies on this tangent line and mark that red."
+    DEFAULT_PROMPT="A line is drawn tangent to the circle at the highlighted point. Speak out which option lies on this tangent line in phonetic alphabet and mark that red."
     DEFAULT_GPT5_PROMPT="Which option lies on the line that is tangent to the circle at the highlighted point? Answer an option in A-E."
 
     def create_puzzle(self) -> PointTargetPuzzleRecord:
@@ -43,20 +43,20 @@ class CircleTangentLineGenerator(PointTargetPuzzleGenerator):
                 y=point_on_circle.y + dist_from_poc * math.sin(tangent_angle)
             )
 
+            self.circle_center = center
+            self.circle_radius = radius
+            self.point_on_circle = point_on_circle
+            self.target_point = target_point
+            
+            self.place_candidates_line(target_point, tangent_angle+math.pi/2+self._rng.uniform(-0.1,0.1))
             # 5. Ensure the target point is within the canvas
-            if not self.inside_canvas(target_point):
+            if not self.check_candidates_inside():
                 tries += 1
                 continue
             
             # If everything is valid, break the loop
             break
 
-        self.circle_center = center
-        self.circle_radius = radius
-        self.point_on_circle = point_on_circle
-        self.target_point = target_point
-        
-        self.place_candidates_line(target_point, tangent_angle+math.pi/2+self._rng.uniform(-0.1,0.1))
         
         record = self.save_puzzle()
         record.circle_center = self.circle_center

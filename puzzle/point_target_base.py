@@ -170,7 +170,7 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
         correct_label = labels[correct_index]
         candidates: List[PointCandidate] = []
         target_count = len(labels)
-        spread = max(18.0, 0.9 * radius)
+        spread = max(18.0, 0.9 * radius)*2
         if angle is None:
             angle = self._rng.uniform(0.0, math.tau)
         dx,dy=math.cos(angle)*spread, math.sin(angle)*spread
@@ -181,6 +181,13 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
             candidates.append(PointCandidate(x=cx, y=cy, label=label))
         self.candidates, self.correct_label= candidates, correct_label
 
+    def check_candidates_inside(self)->bool:
+        for candidate in self.candidates:
+            point=Point(candidate.x,candidate.y)
+            if not self.inside_canvas(point):
+                return False
+        return True
+    
     def place_candidates(
         self,
         true_point: Point,
@@ -196,7 +203,7 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
         target_count = len(labels)
         max_attempts = 600
         attempt = 0
-        spread = max(18.0, 0.9 * radius)
+        spread = max(18.0, 0.9 * radius)*2
         while len(candidates) < target_count and attempt < max_attempts:
             attempt += 1
             angle = self._rng.uniform(0.0, math.tau)

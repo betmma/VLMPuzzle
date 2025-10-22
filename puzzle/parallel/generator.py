@@ -43,10 +43,13 @@ class ParallelGenerator(PointTargetPuzzleGenerator):
             if not self.inside_canvas(target) or self.distance(p1, p2) < distance_threshold or distance < distance_threshold:
                 tries+=1
                 continue
+            self.points = (p0, p1, p2)
+            self.target_point = target
+            self.place_candidates_line(target,angle+math.pi/2+self._rng.uniform(-0.1,0.1))
+            if not self.check_candidates_inside():
+                tries += 1
+                continue
             break
-        self.points = (p0, p1, p2)
-        self.target_point = target
-        self.place_candidates_line(target,angle+math.pi/2+self._rng.uniform(-0.1,0.1))
         record = self.save_puzzle()
         record.points=self.points
         return record

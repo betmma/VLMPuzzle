@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import argparse
-import random
-import uuid
 from collections import deque
-from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from PIL import Image, ImageDraw
 
-from ..base import AbstractPuzzleGenerator, PathLike
+from ..maze_base import MazePuzzleGenerator, MazePuzzleRecord
 
 WALL = 1
 PATH = 0
@@ -25,71 +22,69 @@ LINE_COLOR = (220, 0, 0)
 BACKGROUND_COLOR = (0, 0, 0)
 
 
-@dataclass
-class MazePuzzleRecord:
-    id: str
-    prompt: str
-    grid_size: Tuple[int, int]
-    cell_size: int
-    maze_grid: List[List[int]]
-    start: Tuple[int, int]
-    goal: Tuple[int, int]
-    cell_bboxes: List[List[Tuple[int, int, int, int]]]
-    padding: Tuple[int, int, int, int]
-    canvas_dimensions: Tuple[int, int]
-    image: str
-    solution_image_path: str
-
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "prompt": self.prompt,
-            "grid_size": list(self.grid_size),
-            "cell_size": self.cell_size,
-            "maze_grid": self.maze_grid,
-            "start": list(self.start),
-            "goal": list(self.goal),
-            "cell_bboxes": [
-                [list(map(int, bbox)) for bbox in row] for row in self.cell_bboxes
-            ],
-            "padding": list(self.padding),
-            "canvas_dimensions": list(self.canvas_dimensions),
-            "image": self.image,
-            "solution_image_path": self.solution_image_path,
-        }
-
-
-class MazeGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
+class MazeGenerator(MazePuzzleGenerator):
     """Generate maze puzzles that require drawing a path from start to goal."""
+
+    DEFAULT_ROWS = 15
+    DEFAULT_COLS = 15
+    DEFAULT_CELL_SIZE = 32
 
     def __init__(
         self,
-        output_dir: PathLike = "data/maze",
+        output_dir: Optional[str | Path] = None,
         *,
-        rows: int = 15,
-        cols: int = 15,
-        cell_size: int = 32,
-        prompt: str = "Draw a red line from the red start cell to the green goal cell, avoiding the black walls. Static camera, no zoom, no pan, no dolly.",
+        canvas_width: Optional[int] = None,
+        aspect: Optional[float] = None,
+        size: Optional[int] = None,
+        rows: int = DEFAULT_ROWS,
+        cols: int = DEFAULT_COLS,
+        cell_size: Optional[int] = None,
         aspect_ratio: Optional[float] = None,
         seed: Optional[int] = None,
+        prompt: Optional[str] = None,
     ) -> None:
-        super().__init__(output_dir)
         if rows < 5 or cols < 5:
             raise ValueError("rows and cols must be at least 5")
-        self.rows = rows if rows % 2 == 1 else rows + 1
-        self.cols = cols if cols % 2 == 1 else cols + 1
-        self.cell_size = cell_size
-        self.prompt = prompt
-        self.aspect_ratio = aspect_ratio
-        self._rng = random.Random(seed)
-
-        self.puzzle_dir = self.output_dir / "puzzles"
-        self.solution_dir = self.output_dir / "solutions"
-        for directory in (self.puzzle_dir, self.solution_dir):
-            directory.mkdir(parents=True, exist_ok=True)
+        adjusted_rows = rows if rows % 2 == 1 else rows + 1
+        adjusted_cols = cols if cols % 2 == 1 else cols + 1
+        effective_cell_size = int(
+            cell_size if cell_size is not None else (size if size is not None else self.DEFAULT_CELL_SIZE)
+        )
+        if effective_cell_size <= 0:
+            raise ValueError("cell_size must be positive")
+        ratio = aspect_ratio if aspect_ratio is not None else aspect
+        pad_left, pad_top, pad_right, pad_bottom, canvas_dims = self._layout_for(
+            adjusted_rows,
+            adjusted_cols,
+            effective_cell_size,
+            ratio,
+        )
+        if canvas_width is not None and canvas_width > canvas_dims[0]:
+            extra = canvas_width - canvas_dims[0]
+            left_extra = extra // 2
+            right_extra = extra - left_extra
+            pad_left += left_extra
+            pad_right += right_extra
+            canvas_dims = (canvas_width, canvas_dims[1])
+        final_width, final_height = canvas_dims
+        aspect_for_super = (final_width / final_height) if final_height else None
+        resolved_output = output_dir if output_dir is not None else self.DEFAULT_OUTPUT_DIR
+        super().__init__(
+            resolved_output,
+            canvas_width=final_width,
+            aspect=aspect_for_super,
+            size=effective_cell_size,
+            seed=seed,
+            prompt=prompt,
+        )
+        self.rows = adjusted_rows
+        self.cols = adjusted_cols
+        self.cell_size = effective_cell_size
+        self.aspect_ratio = ratio
+        self.padding = (pad_left, pad_top, pad_right, pad_bottom)
 
     def create_puzzle(self, *, puzzle_id: Optional[str] = None) -> MazePuzzleRecord:
-        puzzle_uuid = puzzle_id or str(uuid.uuid4())
+        puzzle_uuid = puzzle_id or self.next_id()
         maze_grid = self._generate_maze()
         start = (1, 1)
         goal = (self.rows - 2, self.cols - 2)
@@ -117,28 +112,28 @@ class MazeGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
             canvas_dims=canvas_dims,
         )
 
-        puzzle_path = self.puzzle_dir / f"{puzzle_uuid}_puzzle.png"
-        solution_path = self.solution_dir / f"{puzzle_uuid}_solution.png"
-        puzzle_image.save(puzzle_path)
-        solution_image.save(solution_path)
+        puzzle_path, solution_path = self.save_images(puzzle_uuid, puzzle_image, solution_image)
 
-        return MazePuzzleRecord(
-            id=puzzle_uuid,
+        start_point = self._cell_center(start, pad_left, pad_top)
+        goal_point = self._cell_center(goal, pad_left, pad_top)
+        extra_payload: Dict[str, object] = {
+            "grid_size": [self.rows, self.cols],
+            "cell_size": self.cell_size,
+            "maze_grid": maze_grid,
+            "start": list(start),
+            "goal": list(goal),
+            "cell_bboxes": cell_bboxes,
+            "padding": [pad_left, pad_top, pad_right, pad_bottom],
+        }
+        return self.build_record(
+            puzzle_uuid,
+            start_point=start_point,
+            goal_point=goal_point,
+            puzzle_path=puzzle_path,
+            solution_path=solution_path,
             prompt=self.prompt,
-            grid_size=(self.rows, self.cols),
-            cell_size=self.cell_size,
-            maze_grid=maze_grid,
-            start=start,
-            goal=goal,
-            cell_bboxes=cell_bboxes,
-            padding=(pad_left, pad_top, pad_right, pad_bottom),
-            canvas_dimensions=canvas_dims,
-            image=self.relativize_path(puzzle_path),
-            solution_image_path=self.relativize_path(solution_path),
+            extra=extra_payload,
         )
-
-    def create_random_puzzle(self) -> MazePuzzleRecord:
-        return self.create_puzzle()
 
     # ------------------------------------------------------------------
 
@@ -148,7 +143,7 @@ class MazeGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
         def carve(r: int, c: int) -> None:
             grid[r][c] = PATH
             directions = [(0, 2), (0, -2), (2, 0), (-2, 0)]
-            self._rng.shuffle(directions)
+            self.rng.shuffle(directions)
             for dr, dc in directions:
                 nr, nc = r + dr, c + dc
                 if 1 <= nr < self.rows - 1 and 1 <= nc < self.cols - 1 and grid[nr][nc] == WALL:
@@ -190,13 +185,22 @@ class MazeGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
         return result
 
     def _compute_padding(self) -> Tuple[int, int, int, int, Tuple[int, int]]:
-        base_width = self.cols * self.cell_size
-        base_height = self.rows * self.cell_size
-        if self.aspect_ratio is None:
+        return self._layout_for(self.rows, self.cols, self.cell_size, self.aspect_ratio)
+
+    @staticmethod
+    def _layout_for(
+        rows: int,
+        cols: int,
+        cell_size: int,
+        aspect_ratio: Optional[float],
+    ) -> Tuple[int, int, int, int, Tuple[int, int]]:
+        base_width = cols * cell_size
+        base_height = rows * cell_size
+        if aspect_ratio is None:
             return 0, 0, 0, 0, (base_width, base_height)
-        ratio = float(self.aspect_ratio)
+        ratio = float(aspect_ratio)
         if ratio <= 0:
-            raise ValueError("aspect_ratio must be positive")
+            raise ValueError("aspect ratio must be positive")
         base_ratio = base_width / base_height
         if ratio >= base_ratio:
             final_height = base_height
@@ -324,42 +328,53 @@ class MazeGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
             fill=LINE_COLOR,
         )
 
+    def _cell_center(self, cell: Tuple[int, int], pad_left: int, pad_top: int) -> Tuple[float, float]:
+        row, col = cell
+        x = pad_left + col * self.cell_size + self.cell_size / 2.0
+        y = pad_top + row * self.cell_size + self.cell_size / 2.0
+        return (x, y)
 
-__all__ = ["MazeGenerator", "MazePuzzleRecord"]
+    @classmethod
+    def _parse_args(cls, argv: Optional[List[str]] = None) -> argparse.Namespace:
+        parser = argparse.ArgumentParser(description="Generate maze puzzles for VLM training")
+        parser.add_argument("count", type=int, help="Number of puzzles to generate")
+        parser.add_argument("--output-dir", type=Path, default=None, help="Where to save assets")
+        parser.add_argument("--rows", type=int, default=cls.DEFAULT_ROWS)
+        parser.add_argument("--cols", type=int, default=cls.DEFAULT_COLS)
+        parser.add_argument("--cell-size", type=int, default=None, help="Cell size in pixels; overrides --size")
+        parser.add_argument("--canvas-width", type=int, default=None, help="Optional override for final canvas width")
+        parser.add_argument("--aspect", type=float, default=None, help="Optional width/height ratio for the final image")
+        parser.add_argument("--size", type=int, default=None, help="Alias for --cell-size to match base interface")
+        parser.add_argument("--prompt", type=str, default=None)
+        parser.add_argument("--seed", type=int, default=None)
+        return parser.parse_args(argv)
+
+    @classmethod
+    def main(cls, argv: Optional[List[str]] = None) -> None:
+        args = cls._parse_args(argv)
+        cell_size = args.cell_size if args.cell_size is not None else (args.size if args.size is not None else cls.DEFAULT_CELL_SIZE)
+        prompt_arg = args.prompt if args.prompt is not None else cls.DEFAULT_PROMPT
+        generator = cls(
+            output_dir=args.output_dir,
+            canvas_width=args.canvas_width,
+            aspect=args.aspect,
+            size=cell_size,
+            rows=args.rows,
+            cols=args.cols,
+            cell_size=cell_size,
+            seed=args.seed,
+            prompt=prompt_arg,
+        )
+        records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
+        generator.write_metadata(records, generator.output_dir / "data.json")
 
 
-def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate maze puzzles for VLM training")
-    parser.add_argument("count", type=int, help="Number of puzzles to generate")
-    parser.add_argument("--output-dir", type=Path, default=Path("data/maze"), help="Where to save assets")
-    parser.add_argument("--rows", type=int, default=15)
-    parser.add_argument("--cols", type=int, default=15)
-    parser.add_argument("--cell-size", type=int, default=32)
-    parser.add_argument(
-        "--aspect-ratio",
-        type=float,
-        default=None,
-        help="Optional width/height ratio for the final image (adds black padding on outer edges only)",
-    )
-    parser.add_argument("--prompt", type=str, default="Draw a red line from the red start cell to the green goal cell, avoiding the black walls.")
-    parser.add_argument("--seed", type=int, default=None)
-    return parser.parse_args(argv)
+__all__ = ["MazeGenerator"]
 
 
 def main(argv: Optional[List[str]] = None) -> None:
-    args = _parse_args(argv)
-    generator = MazeGenerator(
-        output_dir=args.output_dir,
-        rows=args.rows,
-        cols=args.cols,
-        cell_size=args.cell_size,
-        prompt=args.prompt,
-        aspect_ratio=args.aspect_ratio,
-        seed=args.seed,
-    )
-    metadata_path = generator.output_dir / "data.json"
-    generator.generate_dataset(args.count, metadata_path=metadata_path)
+    MazeGenerator.main(argv)
 
 
 if __name__ == "__main__":
-    main()
+    MazeGenerator.main()

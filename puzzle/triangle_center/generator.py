@@ -27,7 +27,7 @@ class TriangleCenterGenerator(PointTargetPuzzleGenerator):
             d1=math.sqrt((center.x - p12.x)**2 + (center.y - p12.y)**2)
             d2=math.sqrt((center.x - p23.x)**2 + (center.y - p23.y)**2)
             d3=math.sqrt((center.x - p31.x)**2 + (center.y - p31.y)**2)
-            if min(d1,d2,d3)<self.canvas_short_side*0.1:
+            if min(d1,d2,d3)<self.canvas_short_side*0.3:
                 tries+=1
                 continue
             break

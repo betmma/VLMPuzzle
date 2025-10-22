@@ -7,5 +7,6 @@ __all__ = [
     "MazeEvaluationResult",
 ]
 
-from .generator import MazeGenerator, MazePuzzleRecord
+from ..maze_base import MazePuzzleRecord
+from .generator import MazeGenerator
 from .evaluator import MazeEvaluator, MazeEvaluationResult

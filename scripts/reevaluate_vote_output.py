@@ -112,7 +112,6 @@ def _default_output_root(source_root: Path) -> Path:
 
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Re-evaluate vote outputs for a puzzle type")
-    parser.add_argument("puzzle_type", type=str, help="Puzzle type name (e.g. ray_intersection)")
     parser.add_argument("input_vote_root", type=Path, help="Existing vote output directory to re-evaluate")
     parser.add_argument("--metadata", type=Path, default=None, help="Puzzle metadata JSON path (default: data/<puzzle_type>/data.json)")
     parser.add_argument("--base-dir", type=Path, default=None, help="Optional override for evaluator base directory")
@@ -125,9 +124,7 @@ def main(argv: Optional[Iterator[str]] = None) -> None:
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
 
-    puzzle_type = args.puzzle_type.strip()
-    if not puzzle_type:
-        raise ValueError("Puzzle type must be a non-empty string")
+    puzzle_type = ''
 
     input_vote_root = args.input_vote_root.resolve()
     if not input_vote_root.exists() or not input_vote_root.is_dir():
@@ -143,8 +140,8 @@ def main(argv: Optional[Iterator[str]] = None) -> None:
 
     base_dir = args.base_dir.resolve() if args.base_dir else None
 
-    evaluator_cls = _discover_evaluator_class(puzzle_type)
-    evaluator = evaluator_cls(metadata_resolved, base_dir=base_dir)
+    evaluator_cls = None #_discover_evaluator_class(puzzle_type)
+    evaluator = None
 
     processed = 0
     skipped = 0
@@ -153,18 +150,35 @@ def main(argv: Optional[Iterator[str]] = None) -> None:
         payload_text = evaluation_path.read_text(encoding="utf-8")
         payload_outer = json.loads(payload_text)
         stdout_blob = payload_outer.get("stdout")
+        puzzle_id=None
         if not isinstance(stdout_blob, str) or not stdout_blob.strip():
-            skipped += 1
-            continue
-        inner_payload = json.loads(stdout_blob)
-        puzzle_id_raw = inner_payload.get("puzzle_id")
-        puzzle_id = str(puzzle_id_raw).strip() if puzzle_id_raw is not None else ""
+            pass
+            # skipped += 1
+            # continue
+        else:
+            inner_payload = json.loads(stdout_blob)
+            puzzle_id_raw = inner_payload.get("puzzle_id")
+            puzzle_id = str(puzzle_id_raw).strip() if puzzle_id_raw is not None else ""
         if not puzzle_id:
+            try:
+                puzzle_id= payload_outer.get("vote_run_directory").split('/')[-1].split('_')[-3]
+            except Exception:
+                skipped += 1
+                continue
+
+        try:
+            this_puzzle_type='_'.join(payload_outer.get("vote_run_directory").split('/')[-1].split('_')[:-3])
+            if puzzle_type != this_puzzle_type:
+                puzzle_type = this_puzzle_type
+                evaluator_cls = _discover_evaluator_class(puzzle_type)
+                evaluator = evaluator_cls(metadata_resolved/puzzle_type/'data.json', base_dir=base_dir)
+                print(f"Switched to evaluator for puzzle type: {puzzle_type}")
+        except Exception as e:
+            print(f"Failed to discover evaluator for puzzle type from payload: {e}")
             skipped += 1
             continue
-
         candidate_image = payload_outer['result_png']
-
+        print(puzzle_type, puzzle_id, candidate_image)
         result = evaluator.evaluate(puzzle_id, candidate_image)
         result_payload = _serialize_result(result)
 

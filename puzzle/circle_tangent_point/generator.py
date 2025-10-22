@@ -55,7 +55,7 @@ class CircleTangentPointGenerator(PointTargetPuzzleGenerator):
         
         # Define a narrow angular spread (e.g., 40 degrees total) for challenge
         # The wider the spread, the easier the visual distinction.
-        angular_spread = math.radians(self._rng.uniform(30.0, 55.0))
+        angular_spread = math.radians(self._rng.uniform(30.0, 55.0))*3
         
         # Calculate the angular separation between candidates
         angular_step = angular_spread / (len(labels) - 1)
@@ -114,16 +114,24 @@ class CircleTangentPointGenerator(PointTargetPuzzleGenerator):
                 tries += 1
                 continue
             
-            # Success
-            break
 
-        self.center = center
-        self.r = R
-        self.external_point = external_point
-        self.target_point = target_point
-        
-        # 4. Place candidates on the circle's circumference
-        self.place_candidates_on_circle(center, R, target_point)
+            self.center = center
+            self.r = R
+            self.external_point = external_point
+            self.target_point = target_point
+            
+            # 4. Place candidates on the circle's circumference
+            self.place_candidates_on_circle(center, R, target_point)
+            for candidate in self.candidates:
+                if candidate.label == self.correct_label:
+                    continue
+                dir1=math.atan2(center.y - candidate.y, center.x - candidate.x)
+                dir2=math.atan2(external_point.y - candidate.y, external_point.x - candidate.x)
+                if abs(math.cos(dir1 - dir2))<0.2:
+                    break # Not tangent enough, retry
+            else:
+                # Success
+                break
         
         record = self.save_puzzle()
         record.circle_center = self.center

@@ -53,17 +53,18 @@ class PerpendicularBisectorGenerator(PointTargetPuzzleGenerator):
                 midpoint.y + dist_from_mid * u_perp_dy
             )
 
-            if self.inside_canvas(target):
-                break
-            tries += 1
-
-        self.points = (p1, p2)
-        self.target_point = target
-        
-        # Place candidates along a line roughly perpendicular to the bisector itself
-        # (i.e., parallel to the original p1-p2 segment)
-        angle = math.atan2(p2.y - p1.y, p2.x - p1.x)
-        self.place_candidates_line(target, angle + self._rng.uniform(-0.1, 0.1))
+            self.points = (p1, p2)
+            self.target_point = target
+            
+            # Place candidates along a line roughly perpendicular to the bisector itself
+            # (i.e., parallel to the original p1-p2 segment)
+            angle = math.atan2(p2.y - p1.y, p2.x - p1.x)
+            self.place_candidates_line(target, angle + self._rng.uniform(-0.1, 0.1))
+            
+            if not self.check_candidates_inside():
+                tries += 1
+                continue
+            break
 
         record = self.save_puzzle()
         record.points = self.points
