@@ -133,10 +133,10 @@ def main(argv: Optional[Iterator[str]] = None) -> None:
     output_root = args.output_root.resolve() if args.output_root else _default_output_root(input_vote_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
-    metadata_path = args.metadata if args.metadata else (REPO_ROOT / "data" / puzzle_type / "data.json")
+    metadata_path = args.metadata if args.metadata else (REPO_ROOT / "data" )
     metadata_resolved = metadata_path.resolve()
-    if not metadata_resolved.exists():
-        raise FileNotFoundError(f"Metadata file not found: {metadata_resolved.as_posix()}")
+    # if not metadata_resolved.exists():
+    #     raise FileNotFoundError(f"Metadata file not found: {metadata_resolved.as_posix()}")
 
     base_dir = args.base_dir.resolve() if args.base_dir else None
 
