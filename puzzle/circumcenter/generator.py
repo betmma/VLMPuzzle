@@ -55,7 +55,7 @@ def calculate_circumcenter(p1: Point, p2: Point, p3: Point):
 class CircumcenterGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles to find the circumcenter of a triangle."""
     DEFAULT_OUTPUT_DIR="data/circumcenter"
-    DEFAULT_PROMPT="Mark the circumcenter of the triangle red. Speak out which option is the circumcenter using phonetic alphabet"
+    DEFAULT_PROMPT="Mark the circumcenter of the triangle red. Speak out which option is the circumcenter using phonetic alphabet. In portrait, no zoom, no pan."
     DEFAULT_GPT5_PROMPT="Which option is the circumcenter of the triangle? Answer an option in A-E."
 
     def create_puzzle(self) -> PointTargetPuzzleRecord:

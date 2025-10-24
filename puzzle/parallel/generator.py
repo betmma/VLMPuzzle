@@ -24,7 +24,7 @@ def distanceToLine(point: Point, line_point1: Point, line_point2: Point) -> floa
 class ParallelGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles to find the center of a triangle."""
     DEFAULT_OUTPUT_DIR="data/parallel"
-    DEFAULT_PROMPT="Draw a line through the small circle and parallel to the existing line. Speak out which option is on the new line using phonetic alphabet and mark that red."
+    DEFAULT_PROMPT="Draw a black line through the small circle and parallel to the existing line. Speak out which option is on the new line using phonetic alphabet and mark that red. In portrait, no zoom, no pan."
     DEFAULT_GPT5_PROMPT="Draw a line through the small circle and parallel to the existing line, which option is on it? Answer an option in A-E."
 
     def create_puzzle(self) -> PointTargetPuzzleRecord:

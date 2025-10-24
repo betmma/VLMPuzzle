@@ -14,7 +14,7 @@ def distance(p1: Point, p2: Point) -> float:
 class PerpendicularBisectorGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles to find a point on the perpendicular bisector of a line segment."""
     DEFAULT_OUTPUT_DIR="data/perpendicular_bisector"
-    DEFAULT_PROMPT="Draw a line that is the perpendicular bisector of the segment between the two small circles. Speak out which option is on the line using phonetic alphabet and mark that red."
+    DEFAULT_PROMPT="Draw a black line that is the perpendicular bisector of the segment between the two small circles. Speak out which option is on the line using phonetic alphabet and mark that red. In portrait, no zoom, no pan."
     DEFAULT_GPT5_PROMPT="Which option is on the perpendicular bisector of the segment connecting the two small circles? Answer an option in A-E."
 
     def create_puzzle(self) -> PointTargetPuzzleRecord:

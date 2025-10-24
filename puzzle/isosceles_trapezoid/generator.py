@@ -10,7 +10,7 @@ from ..point_target_base import PointTargetPuzzleGenerator, PointTargetPuzzleRec
 class IsoscelesTrapezoidGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles to find the fourth vertex of an isosceles trapezoid."""
     DEFAULT_OUTPUT_DIR="data/isosceles_trapezoid"
-    DEFAULT_PROMPT="Find the fourth vertex that completes the isosceles trapezoid. Mark the fourth vertex red. Speak out which option is the fourth vertex using phonetic alphabet."
+    DEFAULT_PROMPT="Find the fourth vertex that completes the isosceles trapezoid. Mark the fourth vertex red. Speak out which option is the fourth vertex using phonetic alphabet. In portrait, no zoom, no pan."
     DEFAULT_GPT5_PROMPT="Which option is the fourth vertex of the isosceles trapezoid? Answer an option in A-E."
 
     def create_puzzle(self) -> PointTargetPuzzleRecord:

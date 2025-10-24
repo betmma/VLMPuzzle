@@ -433,8 +433,6 @@ class PointTargetPuzzleEvaluator(AbstractPuzzleEvaluator):
     ) -> Tuple[Optional[str], int, Optional[Tuple[float, float]]]:
         height = frame.shape[0]
         width = frame.shape[1]
-        if height <= 0 or width <= 0:
-            return None, 0, None
         canvas_dims_obj = record.get("canvas_dimensions")
         scale = self._extract_scale(canvas_dims_obj, width, height)
         if scale is None:
@@ -442,29 +440,42 @@ class PointTargetPuzzleEvaluator(AbstractPuzzleEvaluator):
         scale_x, scale_y = scale
         red_mask = self._red_mask(frame)
         red_pixels = np.column_stack(np.nonzero(red_mask > 0.5))
+        candidates_raw = record.get("candidates") or []
+        scaled_candidates: List[Dict[str, object]] = []
+        for entry in candidates_raw:
+            label = entry.get("label")
+            x, y = entry.get("x"), entry.get("y")
+
+            cx = float(x) * scale_x
+            cy = float(y) * scale_y
+            scaled_candidates.append({"label": label, "x": cx, "y": cy})
+        # if want to exclude red pixels far from candidates: 
+        # threshold = min(height, width) / 5.0
+        # if red_pixels.size and scaled_candidates:
+        #     coords = red_pixels.astype(np.float32)
+        #     candidate_coords = np.array([[c["y"], c["x"]] for c in scaled_candidates], dtype=np.float32)
+        #     if candidate_coords.size:
+        #         distance_sq = np.sum((coords[:, None, :] - candidate_coords[None, :, :]) ** 2, axis=2)
+        #         mask = np.min(distance_sq, axis=1) <= (threshold * threshold)
+        #         red_pixels = red_pixels[mask]
         red_count = int(red_pixels.shape[0])
         if red_count < 20:
             return None, red_count, None
         mean_y = float(red_pixels[:, 0].mean())
         mean_x = float(red_pixels[:, 1].mean())
         red_point = (mean_x, mean_y)
-        candidates_raw = record.get("candidates")
+        # print(f"Detected {red_count} red pixels, centroid at ({mean_x:.1f}, {mean_y:.1f})")
+        
         best_label: Optional[str] = None
-        best_distance: Optional[float] = None
-        if isinstance(candidates_raw, Iterable):
-            for entry in candidates_raw:
-                if isinstance(entry, dict):
-                    label_obj = entry.get("label")
-                    if isinstance(label_obj, str) and len(label_obj) == 1:
-                        cx_obj = entry.get("x")
-                        cy_obj = entry.get("y")
-                        if isinstance(cx_obj, (int, float)) and isinstance(cy_obj, (int, float)):
-                            cx = float(cx_obj) * scale_x
-                            cy = float(cy_obj) * scale_y
-                            distance = math.hypot(cx - mean_x, cy - mean_y)
-                            if best_distance is None or distance < best_distance:
-                                best_distance = distance
-                                best_label = label_obj
+        best_distance: float = math.inf
+        for scaled in scaled_candidates:
+            label, cx, cy = scaled['label'], scaled['x'], scaled['y']
+            distance = math.hypot(cx - mean_x, cy - mean_y)
+            # print(f"Candidate {label}: position ({cx:.1f}, {cy:.1f}), distance {distance:.1f}")
+
+            if distance < best_distance:
+                best_distance = distance
+                best_label = label
         return best_label, red_count, red_point
 
     def _extract_scale(

@@ -69,7 +69,7 @@ CandidatePoint = PointCandidate
 class MidpointGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles that hide the midpoint of a segment."""
     DEFAULT_OUTPUT_DIR="data/midpoint"
-    DEFAULT_PROMPT="Connect the two large circles and mark the midpoint as red. Speak out which option is the midpoint using phonetics alphabet"
+    DEFAULT_PROMPT="Connect the two large circles and mark the midpoint as red. Speak out which option is the midpoint using phonetics alphabet. In portrait, no zoom, no pan."
     DEFAULT_GPT5_PROMPT="Which option is the midpoint of the two circles? Answer an option in A-E."
 
     def create_puzzle(self, *, puzzle_id: Optional[str] = None) -> MidpointPuzzleRecord:

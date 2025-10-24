@@ -9,7 +9,7 @@ from ..point_target_base import PointTargetPuzzleGenerator, PointTargetPuzzleRec
 class CircleCenterGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles to find the center of a circle."""
     DEFAULT_OUTPUT_DIR="data/circle_center"
-    DEFAULT_PROMPT="Mark the center of the circle red. Speak out which option is the center using phonetic alphabet"
+    DEFAULT_PROMPT="Mark the center of the circle red. Speak out which option is the center using phonetic alphabet. In portrait, no zoom, no pan."
     DEFAULT_GPT5_PROMPT="Which option is the center of the circle? Answer an option in A-E."
 
     def create_puzzle(self) -> PointTargetPuzzleRecord:

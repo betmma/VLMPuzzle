@@ -10,7 +10,7 @@ from ..point_target_base import PointTargetPuzzleGenerator, PointTargetPuzzleRec
 class RayReflectGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles where a ray reflects off a line."""
     DEFAULT_OUTPUT_DIR="data/ray_reflect"
-    DEFAULT_PROMPT="Draw the ray of light starting from the small circle and reflecting off the line in black. Speak out which option the reflected ray will pass through using phonetic alphabet and mark it red."
+    DEFAULT_PROMPT="Draw the ray of light starting from the small circle and reflecting off the line in black. Speak out which option the reflected ray will pass through using phonetic alphabet and mark it red. In portrait, no zoom, no pan."
     DEFAULT_GPT5_PROMPT="A ray of light starts from the small circle and reflects off the line. Which option will the reflected ray pass through? Answer an option in A-E."
 
     def _reflect_point(self, point_to_reflect: Point, line_p1: Point, line_p2: Point) -> Point:

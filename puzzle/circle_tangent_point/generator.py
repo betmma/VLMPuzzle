@@ -7,7 +7,7 @@ from ..point_target_base import PointTargetPuzzleGenerator, PointTargetPuzzleRec
 class CircleTangentPointGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles to find the point on a circle where the tangent line from an external point touches."""
     DEFAULT_OUTPUT_DIR="data/circle_tangent_point"
-    DEFAULT_PROMPT="Mark the point on the circle where the tangent line from the external point touches red. Speak out which option is the point using phonetic alphabet"
+    DEFAULT_PROMPT="Draw the tangent line from the external point to the circle in black. Paint the point of tangency red. Speak out which option is the point using phonetic alphabet. In portrait, no zoom, no pan."
     DEFAULT_GPT5_PROMPT="Which option is the tangent point on the circle from the external point? Answer an option in A-E."
 
     def calculate_tangent_point(self, center: Point, R: float, external: Point) -> Point:

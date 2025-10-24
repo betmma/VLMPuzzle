@@ -48,7 +48,7 @@ def calculate_incenter_and_inradius(p1: Point, p2: Point, p3: Point) -> Tuple[Po
 class IncenterGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles to find the incenter of a triangle."""
     DEFAULT_OUTPUT_DIR="data/incenter"
-    DEFAULT_PROMPT="Mark the incenter of the triangle red. Speak out which option is the incenter using phonetic alphabet"
+    DEFAULT_PROMPT="Mark the incenter of the triangle red. Speak out which option is the incenter using phonetic alphabet. In portrait, no zoom, no pan."
     DEFAULT_GPT5_PROMPT="Which option is the incenter of the triangle? Answer an option in A-E."
 
     def create_puzzle(self) -> PointTargetPuzzleRecord:

@@ -10,7 +10,7 @@ from ..point_target_base import PointTargetPuzzleGenerator, PointTargetPuzzleRec
 class FermatPointGenerator(PointTargetPuzzleGenerator):
     """Generate puzzles to find the Fermat point of a triangle."""
     DEFAULT_OUTPUT_DIR="data/fermat_point"
-    DEFAULT_PROMPT="Find the Fermat point of the triangle. Mark the point red. Speak out which option is the Fermat point using the phonetic alphabet."
+    DEFAULT_PROMPT="Find the Fermat point of the triangle. Mark the point red. Speak out which option is the Fermat point using the phonetic alphabet. In portrait, no zoom, no pan."
     DEFAULT_GPT5_PROMPT="Which option is the Fermat point of the triangle? Answer an option in A-E."
 
     def _dist_sq(self, p1: Point, p2: Point) -> float:

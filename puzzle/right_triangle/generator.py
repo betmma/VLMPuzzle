@@ -14,7 +14,7 @@ class RightTriangleGenerator(PointTargetPuzzleGenerator):
     The goal is to identify the vertex with the right angle.
     """
     DEFAULT_OUTPUT_DIR = "data/right_triangle"
-    DEFAULT_PROMPT = "Out of the 5 points, 3 form a right-angled triangle. Mark the vertex with the right angle in red. Speak out which option is the right-angle vertex using phonetic alphabet."
+    DEFAULT_PROMPT = "Out of the 5 points, 3 form a right-angled triangle. Mark the vertex with the right angle in red. Speak out which option is the right-angle vertex using phonetic alphabet. In portrait, no zoom, no pan."
     DEFAULT_GPT5_PROMPT = "Which option is the vertex of the right angle, given that exactly three of the five options form a right-angled triangle? Answer an option in A-E."
 
     def _cos_angle(self, p_a: Point, p_b: Point, p_c: Point) -> float:
