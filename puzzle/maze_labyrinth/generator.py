@@ -27,7 +27,6 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
     """Generate mazes arranged on concentric rings with angular segments."""
 
     DEFAULT_OUTPUT_DIR = "data/maze_labyrinth"
-    DEFAULT_PROMPT = "Trace a red path from the start marker to reach the center without touching the black walls."
 
     DEFAULT_RINGS = 6  # Number of rings excluding the central cell.
     DEFAULT_SEGMENTS = 18

@@ -23,6 +23,10 @@ __all__ = [
     "ArcCellEvaluation",
     "MazeGenerator",
     "MazeEvaluator",
+    "MazeLabyrinthGenerator",
+    "MazeLabyrinthEvaluator",
+    "MazeHexagonGenerator",
+    "MazeHexagonEvaluator",
     "MazePuzzleRecord",
     "MazeEvaluationResult",
     "PieceEvaluation",
@@ -83,6 +87,14 @@ from .maze import (
     MazeEvaluator,
     MazePuzzleRecord,
     MazeEvaluationResult,
+)
+from .maze_labyrinth import (
+    MazeLabyrinthGenerator,
+    MazeLabyrinthEvaluator,
+)
+from .maze_hexagon import (
+    MazeHexagonGenerator,
+    MazeHexagonEvaluator,
 )
 from .rects import (
     RectsGenerator,

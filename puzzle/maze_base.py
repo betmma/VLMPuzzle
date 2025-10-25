@@ -56,7 +56,7 @@ class MazePuzzleGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
     """Base generator providing canvas configuration and asset management."""
 
     DEFAULT_OUTPUT_DIR: Optional[PathLike] = "data/maze"
-    DEFAULT_PROMPT: Optional[str] = "Draw a red path from the start marker to the goal without touching the black walls."
+    DEFAULT_PROMPT: Optional[str] = "Draw a red path connecting two red dots without touching the black walls. In portrait. Static camera."
 
     def __init__(
         self,
