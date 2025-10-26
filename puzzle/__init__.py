@@ -122,7 +122,6 @@ from .arc_connect import (
     ArcConnectGenerator,
     ArcConnectEvaluator,
     ArcConnectPuzzleRecord,
-    ArcConnectEvaluationResult,
 )
 
 from .circle_count import (

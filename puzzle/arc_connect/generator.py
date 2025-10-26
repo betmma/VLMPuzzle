@@ -110,7 +110,7 @@ class ArcConnectGenerator(AbstractPuzzleGenerator[ArcConnectPuzzleRecord]):
         self.arc_span_deg = max(2.0, min(90.0, float(arc_span_deg)))
 
         if prompt is None:
-            prompt = "One arc on the left continues across the masked band to one of the arcs on the right. Which labeled arc matches? Remove the masked band quickly while keeping the arcs still. In portrait. No zoom."
+            prompt = "One arc on the left continues across the masked band to one of the arcs on the right. Which labeled arc matches? Remove the masked band quickly while keeping the arcs still. Speak out the answer in phonetic alphabet. In portrait. Static Camera. No zoom."
         self.prompt = prompt
 
         out = Path(self.output_dir)
@@ -428,7 +428,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("data/arc_connect"))
     parser.add_argument("--canvas-width", type=int, default=480)
     parser.add_argument("--aspect", type=float, default=None, help="Canvas aspect ratio W/H (e.g., 3/4=0.75 portrait)")
-    parser.add_argument("--mask-fraction", type=float, default=0.18)
+    parser.add_argument("--mask-fraction", type=float, default=0.5)
     parser.add_argument("--arc-span-deg", type=float, default=20.0, help="Arc length in degrees from each mask crossing")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--prompt",type=str, default=None)
