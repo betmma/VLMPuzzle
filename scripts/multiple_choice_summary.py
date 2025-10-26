@@ -20,6 +20,8 @@ DEFAULT_VOTE_OUTPUT_ROOT = REPO_ROOT / "data" / "voteOutput"
 
 KEYS=['predicted_option','transcribe_option','video_option','image_option','text_option']
 
+VOTE_IGNORE_NON_ALPHABETIC = True
+
 @dataclass(frozen=True)
 class AttemptRecord:
     puzzle_type: str
@@ -182,6 +184,62 @@ def _summarize_types(records: Iterable[AttemptRecord]) -> None:
     print()
 
 
+def _summarize_voted_accuracy(records: Iterable[AttemptRecord]) -> None:
+    grouped = _group_by_puzzle(records)
+    eligible = 0
+    voted_correct = 0
+    tied = 0
+    unresolved = 0
+    per_type_correct: Dict[str, int] = defaultdict(int)
+    per_type_total: Dict[str, int] = defaultdict(int)
+
+    for attempts in grouped.values():
+        if len(attempts) <= 1:
+            continue
+        eligible += 1
+        counts = Counter(
+            record.predicted_option for record in attempts if record.predicted_option is not None and (not VOTE_IGNORE_NON_ALPHABETIC or record.predicted_option.isalpha())
+        )
+        if not counts:
+            unresolved += 1
+            predicted = None
+        else:
+            most_common = counts.most_common()
+            top_count = most_common[0][1]
+            winners = [option for option, count in most_common if count == top_count]
+            if len(winners) == 1:
+                predicted = winners[0]
+            else:
+                tied += 1
+                predicted = None
+        correct_option = attempts[0].correct_option
+        is_correct = predicted == correct_option
+        if is_correct:
+            voted_correct += 1
+        puzzle_type = attempts[0].puzzle_type
+        per_type_total[puzzle_type] += 1
+        if is_correct:
+            per_type_correct[puzzle_type] += 1
+
+    if not eligible:
+        return
+
+    accuracy = voted_correct / eligible
+    print("Voted accuracy across puzzles with multiple attempts:")
+    print(f"  Eligible puzzles: {eligible}")
+    print(f"  Voted correct: {voted_correct}/{eligible} correct ({accuracy:.0%})")
+    if tied:
+        print(f"  Ties (treated as incorrect): {tied}")
+    if unresolved:
+        print(f"  No predictions across attempts: {unresolved}")
+    for puzzle_type in sorted(per_type_total):
+        total = per_type_total[puzzle_type]
+        correct = per_type_correct.get(puzzle_type, 0)
+        rate = (correct / total) if total else 0.0
+        print(f"    {puzzle_type}: {correct}/{total} correct ({rate:.0%})")
+    print()
+
+
 def summarize_multiple_choice_attempts(vote_root: Path, key: str, top_misses: int) -> bool:
     attempts = list(_iter_attempts(vote_root,key))
     if not attempts:
@@ -206,6 +264,7 @@ def summarize_multiple_choice_attempts(vote_root: Path, key: str, top_misses: in
     _summarize_types(attempts)
     _print_option_breakdown(attempts)
     print()
+    _summarize_voted_accuracy(attempts)
     _summarize_puzzles(attempts, top_misses)
     return True
 
