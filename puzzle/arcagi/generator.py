@@ -116,6 +116,8 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
         cell_size: int = 32,
         prompt: str = "Study the solved examples and produce the correct output for the test input.",
         seed: Optional[int] = None,
+        shot: int = 0,
+        aspect: Optional[float] = None,
     ) -> None:
         super().__init__(output_dir)
         self.dataset_dir = Path(dataset_dir)
@@ -124,6 +126,10 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
         self.cell_size = cell_size
         self.prompt = prompt
         self._rng = random.Random(seed)
+        self.shot = shot
+        if aspect is not None and aspect <= 0:
+            raise ValueError("aspect must be positive")
+        self.aspect = aspect
 
         self.puzzle_dir = self.output_dir / "puzzles"
         self.solution_dir = self.output_dir / "solutions"
@@ -146,6 +152,8 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
         task_file = self._resolve_task_path(task_path)
         task_data = json.loads(task_file.read_text(encoding="utf-8"))
         train_pairs = task_data.get("train") or []
+        if self.shot > 0:
+            train_pairs = train_pairs[:self.shot]
         test_pairs = task_data.get("test") or []
         if not test_pairs:
             raise ValueError(f"Task {task_file} does not include any test pairs")
@@ -156,6 +164,16 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
         record_id = puzzle_id or f"{task_file.stem}-{uuid.uuid4().hex[:8]}"
         puzzle_image = self._render_layout(layout, include_test_solution=False)
         solution_image = self._render_layout(layout, include_test_solution=True)
+
+        if self.aspect is not None:
+            target_width, target_height, offset_x, offset_y = self._compute_padded_geometry(
+                puzzle_image.width,
+                puzzle_image.height,
+            )
+            if target_width != puzzle_image.width or target_height != puzzle_image.height:
+                puzzle_image = self._paste_onto_canvas(puzzle_image, target_width, target_height, offset_x, offset_y)
+                solution_image = self._paste_onto_canvas(solution_image, target_width, target_height, offset_x, offset_y)
+                placements = self._offset_placements(placements, offset_x, offset_y)
 
         puzzle_path = self.puzzle_dir / f"{record_id}_puzzle.png"
         solution_path = self.solution_dir / f"{record_id}_solution.png"
@@ -185,8 +203,6 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
         if task_path is None:
             return self._rng.choice(self._task_paths)
         candidate = Path(task_path)
-        if not candidate.is_absolute():
-            candidate = self.dataset_dir / candidate
         if not candidate.exists():
             raise FileNotFoundError(f"Task file not found: {candidate}")
         return candidate
@@ -380,6 +396,72 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
     def create_random_puzzle(self) -> ArcPuzzleRecord:
         return self.create_puzzle()
 
+    def _compute_padded_geometry(self, width: int, height: int) -> Tuple[int, int, int, int]:
+        if self.aspect is None or height == 0:
+            return width, height, 0, 0
+        target_ratio = self.aspect
+        current_ratio = width / height
+        target_width = width
+        target_height = height
+        if math.isclose(current_ratio, target_ratio, rel_tol=1e-9, abs_tol=1e-9):
+            return width, height, 0, 0
+        if current_ratio < target_ratio:
+            target_width = math.ceil(height * target_ratio)
+        else:
+            target_height = math.ceil(width / target_ratio)
+        offset_x = (target_width - width) // 2
+        offset_y = (target_height - height) // 2
+        return target_width, target_height, offset_x, offset_y
+
+    def _paste_onto_canvas(
+        self,
+        image: Image.Image,
+        width: int,
+        height: int,
+        offset_x: int,
+        offset_y: int,
+    ) -> Image.Image:
+        if width == image.width and height == image.height and offset_x == 0 and offset_y == 0:
+            return image
+        canvas = Image.new("RGB", (width, height), BACKGROUND_COLOR)
+        canvas.paste(image, (offset_x, offset_y))
+        return canvas
+
+    def _offset_placements(
+        self,
+        placements: Sequence[GridPlacement],
+        dx: int,
+        dy: int,
+    ) -> List[GridPlacement]:
+        if dx == 0 and dy == 0:
+            return list(placements)
+        adjusted: List[GridPlacement] = []
+        for placement in placements:
+            x0, y0, x1, y1 = placement.bbox
+            adjusted.append(
+                GridPlacement(
+                    kind=placement.kind,
+                    bbox=(x0 + dx, y0 + dy, x1 + dx, y1 + dy),
+                    rows=placement.rows,
+                    cols=placement.cols,
+                )
+            )
+        return adjusted
+
+    def generate_dataset(
+        self,
+        count: int,
+        *,
+        metadata_path: Optional[PathLike] = None,
+        append: bool = True,
+    ):
+        """Generate a batch of puzzles and optionally persist metadata."""
+        paths = self._rng.choices(self._task_paths, k=count)
+        records = [self.create_puzzle(task_path=path) for path in paths]
+        if metadata_path is not None:
+            self.write_metadata(records, metadata_path, append=append)
+        return records
+
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate ARC-AGI composite puzzles")
@@ -387,9 +469,11 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--dataset", type=Path, default=Path("data/training"), help="Directory containing ARC JSON tasks")
     parser.add_argument("--output-dir", type=Path, default=Path("data/arcagi"), help="Directory to save puzzle assets")
     parser.add_argument("--cell-size", type=int, default=32, help="Pixel size of each grid cell")
-    parser.add_argument("--prompt", type=str, default="Study the solved examples and produce the correct output for the test input.")
+    parser.add_argument("--prompt", type=str, default="Each row contains input and output grids. Learn the pattern and generate the output grid for the last input while keeping existing patterns without modification. Static camera perspective, no zoom or pan. In portrait.")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--metadata", type=Path, default=None, help="Optional path to store metadata JSON")
+    parser.add_argument("--shot", type=int, default=0, help="Number of few-shot examples (training samples) to include in the image")
+    parser.add_argument("--aspect", type=float, default=None, help="Optional target aspect ratio (width/height) for generated images; pads with background when provided")
     return parser.parse_args(argv)
 
 
@@ -401,6 +485,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         cell_size=args.cell_size,
         prompt=args.prompt,
         seed=args.seed,
+        shot=args.shot,
+        aspect=args.aspect,
     )
     metadata_path = args.metadata or (generator.output_dir / "data.json")
     records = generator.generate_dataset(args.count, metadata_path=metadata_path, append=True)

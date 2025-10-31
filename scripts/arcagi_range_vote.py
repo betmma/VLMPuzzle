@@ -221,6 +221,7 @@ def summarize_vote_root(
     puzzles_with_perfect = sum(1 for p in by_puzzle.values() if p.get("perfect"))
     attempt_accuracy = (perfect_attempts / total_attempts) if total_attempts else 0.0
     puzzle_success_rate = (puzzles_with_perfect / total_puzzles) if total_puzzles else 0.0
+    puzzle_average_accuracy = sum(rec['evaluation']['accuracy'] for rec in evals) / total_attempts if total_attempts else 0.0
 
     acc_counts = dict(sorted(acc_counts.items()))
     return {
@@ -234,6 +235,7 @@ def summarize_vote_root(
         "puzzles_with_any_perfect_attempt": puzzles_with_perfect,
         "puzzle_success_rate": puzzle_success_rate,
         "accuracy_counts": dict(acc_counts),
+        "puzzle_average_accuracy": puzzle_average_accuracy,
     }
 
 

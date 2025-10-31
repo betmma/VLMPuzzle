@@ -92,7 +92,6 @@ class AbstractPuzzleGenerator(ABC, Generic[RecordT]):
         append: bool = True,
     ) -> List[RecordT]:
         """Generate a batch of puzzles and optionally persist metadata."""
-
         records = [self.create_random_puzzle() for _ in range(count)]
         if metadata_path is not None:
             self.write_metadata(records, metadata_path, append=append)
