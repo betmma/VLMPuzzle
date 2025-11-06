@@ -215,6 +215,17 @@ class RayIntersectionGenerator(PointTargetPuzzleGenerator):
         stroke_color = (40, 40, 40)
         stroke_width = max(3, int(round(min(width, height) * 0.015)))
 
+        if highlight_label:
+            for ray in rays:
+                draw.line(
+                    [
+                        (int(round(ray.start[0])), int(round(ray.start[1]))),
+                        (int(round(intersection[0])), int(round(intersection[1]))),
+                    ],
+                    fill=stroke_color,
+                    width=stroke_width,
+                )
+        
         for ray in rays:
             draw.line(
                 [

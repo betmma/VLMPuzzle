@@ -12,8 +12,9 @@ import argparse
 import json
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from itertools import combinations
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, Iterator, List, Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_VOTE_OUTPUT_ROOT = REPO_ROOT / "data" / "voteOutput"
@@ -30,6 +31,16 @@ class AttemptRecord:
     predicted_option: Optional[str]
     correct_option: str
     is_correct: bool
+    output_directory: Path
+
+
+@dataclass(frozen=True)
+class MultiAttemptRecord:
+    puzzle_type: str
+    puzzle_id: str
+    attempt_index: int
+    correct_option: str
+    predictions: Dict[str, Optional[str]]
     output_directory: Path
 
 
@@ -59,7 +70,7 @@ def _normalize_option(raw: Optional[object]) -> Optional[str]:
     return text
 
 
-def _parse_attempt(evaluation_path: Path, key:str) -> Optional[AttemptRecord]:
+def _parse_multi_attempt(evaluation_path: Path) -> Optional[MultiAttemptRecord]:
     payload = json.loads(evaluation_path.read_text(encoding="utf-8"))
     stdout_blob = payload.get("stdout")
     if not stdout_blob:
@@ -67,27 +78,43 @@ def _parse_attempt(evaluation_path: Path, key:str) -> Optional[AttemptRecord]:
     inner = json.loads(stdout_blob)
     puzzle_id = str(inner.get("puzzle_id") or "").strip()
     correct_option = _normalize_option(inner.get("correct_option"))
-    predicted_option = _normalize_option(inner.get(key))
-    is_correct = correct_option == predicted_option
     if not puzzle_id or correct_option is None:
         return None
     attempt_index = _coerce_attempt_index(payload.get("attempt"))
     puzzle_type = _infer_puzzle_type(payload.get("vote_run_directory"))
-    return AttemptRecord(
+    predictions: Dict[str, Optional[str]] = {
+        candidate_key: _normalize_option(inner.get(candidate_key)) for candidate_key in KEYS
+    }
+    return MultiAttemptRecord(
         puzzle_type=puzzle_type,
         puzzle_id=puzzle_id,
         attempt_index=attempt_index,
-        predicted_option=predicted_option,
         correct_option=correct_option,
-        is_correct=is_correct,
+        predictions=predictions,
         output_directory=evaluation_path.parent,
     )
 
 
-def _iter_attempts(vote_root: Path, key:str) -> Iterable[AttemptRecord]:
+def _parse_attempt(evaluation_path: Path, key: str) -> Optional[AttemptRecord]:
+    base_record = _parse_multi_attempt(evaluation_path)
+    if base_record is None:
+        return None
+    predicted_option = base_record.predictions.get(key)
+    is_correct = predicted_option == base_record.correct_option
+    return AttemptRecord(
+        puzzle_type=base_record.puzzle_type,
+        puzzle_id=base_record.puzzle_id,
+        attempt_index=base_record.attempt_index,
+        predicted_option=predicted_option,
+        correct_option=base_record.correct_option,
+        is_correct=is_correct,
+        output_directory=base_record.output_directory,
+    )
+
+
+def _iter_evaluation_paths(vote_root: Path) -> Iterator[Path]:
     if not vote_root.exists() or not vote_root.is_dir():
-        return []
-    attempts: List[AttemptRecord] = []
+        return
     for vote_run in sorted(vote_root.iterdir()):
         if not vote_run.is_dir():
             continue
@@ -97,18 +124,35 @@ def _iter_attempts(vote_root: Path, key:str) -> Iterable[AttemptRecord]:
                 continue
             evaluation_path = attempt_dir / "evaluation.json"
             if evaluation_path.exists() and evaluation_path.is_file():
-                record = _parse_attempt(evaluation_path,key)
-                if record is not None:
-                    attempts.append(record)
-                    nested_attempts = True
+                nested_attempts = True
+                yield evaluation_path
         if nested_attempts:
             continue
         evaluation_path = vote_run / "evaluation.json"
         if evaluation_path.exists() and evaluation_path.is_file():
-            record = _parse_attempt(evaluation_path,key)
-            if record is not None:
-                attempts.append(record)
+            yield evaluation_path
+
+
+def _iter_attempts(vote_root: Path, key:str) -> Iterable[AttemptRecord]:
+    if not vote_root.exists() or not vote_root.is_dir():
+        return []
+    attempts: List[AttemptRecord] = []
+    for evaluation_path in _iter_evaluation_paths(vote_root):
+        record = _parse_attempt(evaluation_path,key)
+        if record is not None:
+            attempts.append(record)
     return attempts
+
+
+def _iter_multi_attempts(vote_root: Path) -> List[MultiAttemptRecord]:
+    if not vote_root.exists() or not vote_root.is_dir():
+        return []
+    records: List[MultiAttemptRecord] = []
+    for evaluation_path in _iter_evaluation_paths(vote_root):
+        record = _parse_multi_attempt(evaluation_path)
+        if record is not None:
+            records.append(record)
+    return records
 
 
 def _group_by_puzzle(records: Iterable[AttemptRecord]) -> Dict[str, List[AttemptRecord]]:
@@ -120,6 +164,13 @@ def _group_by_puzzle(records: Iterable[AttemptRecord]) -> Dict[str, List[Attempt
 
 def _group_by_type(records: Iterable[AttemptRecord]) -> Dict[str, List[AttemptRecord]]:
     grouped: Dict[str, List[AttemptRecord]] = defaultdict(list)
+    for record in records:
+        grouped[record.puzzle_type].append(record)
+    return grouped
+
+
+def _group_multi_by_type(records: Iterable[MultiAttemptRecord]) -> Dict[str, List[MultiAttemptRecord]]:
+    grouped: Dict[str, List[MultiAttemptRecord]] = defaultdict(list)
     for record in records:
         grouped[record.puzzle_type].append(record)
     return grouped
@@ -240,19 +291,43 @@ def _summarize_voted_accuracy(records: Iterable[AttemptRecord]) -> None:
     print()
 
 
-def summarize_multiple_choice_attempts(vote_root: Path, key: str, top_misses: int) -> bool:
-    attempts = list(_iter_attempts(vote_root,key))
-    if not attempts:
+def _attempt_records_from_multi(records: Iterable[MultiAttemptRecord], key: str) -> List[AttemptRecord]:
+    converted: List[AttemptRecord] = []
+    for record in records:
+        predicted_option = record.predictions.get(key)
+        is_correct = predicted_option == record.correct_option
+        converted.append(
+            AttemptRecord(
+                puzzle_type=record.puzzle_type,
+                puzzle_id=record.puzzle_id,
+                attempt_index=record.attempt_index,
+                predicted_option=predicted_option,
+                correct_option=record.correct_option,
+                is_correct=is_correct,
+                output_directory=record.output_directory,
+            )
+        )
+    return converted
+
+
+def summarize_multiple_choice_attempts(
+    vote_root: Path,
+    key: str,
+    top_misses: int,
+    attempts: Optional[List[AttemptRecord]] = None,
+) -> bool:
+    attempt_records = attempts if attempts is not None else list(_iter_attempts(vote_root, key))
+    if not attempt_records:
         print(f"No multiple-choice evaluations found under {vote_root.as_posix()}.")
         return False
     
-    all_none = all(record.predicted_option is None for record in attempts)
+    all_none = all(record.predicted_option is None for record in attempt_records)
     if all_none:
         print(f"All attempts have no recognized '{key}' option.")
         return False
 
-    total = len(attempts)
-    correct = sum(1 for record in attempts if record.is_correct)
+    total = len(attempt_records)
+    correct = sum(1 for record in attempt_records if record.is_correct)
     accuracy = (correct / total) if total else 0.0
 
     print("Multiple-choice evaluation summary")
@@ -261,12 +336,110 @@ def summarize_multiple_choice_attempts(vote_root: Path, key: str, top_misses: in
     print(f"Correct attempts: {correct} ({accuracy:.0%})")
     print()
 
-    _summarize_types(attempts)
-    _print_option_breakdown(attempts)
+    _summarize_types(attempt_records)
+    _print_option_breakdown(attempt_records)
     print()
-    _summarize_voted_accuracy(attempts)
-    _summarize_puzzles(attempts, top_misses)
+    _summarize_voted_accuracy(attempt_records)
+    _summarize_puzzles(attempt_records, top_misses)
     return True
+
+
+def _summarize_key_correlations(multi_attempts: List[MultiAttemptRecord]) -> None:
+    if not multi_attempts:
+        print("No evaluation attempts available for key correlation analysis.")
+        return
+
+    existing_keys = [key for key in KEYS if any(record.predictions.get(key) is not None for record in multi_attempts)]
+    if len(existing_keys) < 2:
+        print("Key correlation analysis skipped: fewer than two prediction keys with data.")
+        return
+
+    print("Detected prediction keys with data:")
+    print("  " + ", ".join(sorted(existing_keys)))
+    print()
+
+    grouped = _group_multi_by_type(multi_attempts)
+    print("Prediction key correlation by puzzle type:")
+    for puzzle_type in sorted(grouped.keys()):
+        records = grouped[puzzle_type]
+        pair_stats = []
+        for key_a, key_b in combinations(existing_keys, 2):
+            total = 0
+            same_count = 0
+            correct_when_same = 0
+            diff_count = 0
+            diff_correct_a = 0
+            diff_correct_b = 0
+            for record in records:
+                pred_a = record.predictions.get(key_a)
+                pred_b = record.predictions.get(key_b)
+                total += 1
+                if pred_a == pred_b:
+                    same_count += 1
+                    if pred_a == record.correct_option:
+                        correct_when_same += 1
+                    continue
+                diff_count += 1
+                if pred_a == record.correct_option:
+                    diff_correct_a += 1
+                if pred_b == record.correct_option:
+                    diff_correct_b += 1
+            if not total:
+                continue
+            same_rate = same_count / total
+            same_accuracy = (correct_when_same / same_count) if same_count else 0.0
+            diff_accuracy_a = (diff_correct_a / diff_count) if diff_count else None
+            diff_accuracy_b = (diff_correct_b / diff_count) if diff_count else None
+            pair_stats.append(
+                (
+                    key_a,
+                    key_b,
+                    total,
+                    same_count,
+                    same_rate,
+                    correct_when_same,
+                    same_accuracy,
+                    diff_count,
+                    diff_correct_a,
+                    diff_accuracy_a,
+                    diff_correct_b,
+                    diff_accuracy_b,
+                )
+            )
+        if not pair_stats:
+            continue
+
+        print(f"  {puzzle_type}:")
+        for (
+            key_a,
+            key_b,
+            total,
+            same_count,
+            same_rate,
+            correct_same_count,
+            same_accuracy,
+            diff_count,
+            diff_correct_a,
+            diff_accuracy_a,
+            diff_correct_b,
+            diff_accuracy_b,
+        ) in pair_stats:
+            print(f"    {key_a} vs {key_b}:")
+            print(f"      Comparable attempts: {total}")
+            print(f"      Same predictions: {same_count}/{total} ({same_rate:.0%})")
+            if same_count:
+                print(f"      Accuracy when same: {correct_same_count}/{same_count} ({same_accuracy:.0%})")
+            else:
+                print("      Accuracy when same: n/a")
+            if diff_count:
+                print(
+                    "      Accuracy when different -> "
+                    + f"{key_a}: {diff_correct_a}/{diff_count} ({diff_accuracy_a:.0%}), "
+                    + f"{key_b}: {diff_correct_b}/{diff_count} ({diff_accuracy_b:.0%})"
+                )
+            else:
+                print("      Accuracy when different: n/a")
+        print()
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
@@ -276,8 +449,8 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-root",
         type=Path,
-    default=DEFAULT_VOTE_OUTPUT_ROOT,
-    help="Root directory containing vote outputs (default: data/voteOutput)",
+        default=DEFAULT_VOTE_OUTPUT_ROOT,
+        help="Root directory containing vote outputs (default: data/voteOutput)",
     )
     parser.add_argument(
         "--top-misses",
@@ -287,20 +460,30 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     return parser
 
+
 def summarize_all(vote_root: Path, top_misses: int) -> bool:
+    multi_attempts = _iter_multi_attempts(vote_root)
+    per_key_attempts = {key: _attempt_records_from_multi(multi_attempts, key) for key in KEYS}
+
     any_found = False
     for key in KEYS:
         print(f"Summary for key: {key}")
-        found = summarize_multiple_choice_attempts(vote_root, key=key, top_misses=max(0, top_misses))
+        found = summarize_multiple_choice_attempts(
+            vote_root,
+            key=key,
+            top_misses=max(0, top_misses),
+            attempts=per_key_attempts.get(key),
+        )
         any_found = any_found or found
+
+    print()
+    _summarize_key_correlations(multi_attempts)
     return any_found
 
 def main() -> None:
     parser = _build_arg_parser()
     args = parser.parse_args()
-    for key in KEYS:
-        print(f"Summary for key: {key}")
-        summarize_multiple_choice_attempts(args.output_root, key=key, top_misses=max(0, args.top_misses))
+    summarize_all(args.output_root, top_misses=max(0, args.top_misses))
 
 
 if __name__ == "__main__":
