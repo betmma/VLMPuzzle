@@ -1,189 +1,104 @@
-﻿# Video LM Puzzle Toolkit
+﻿
+# VideoThinkBench Vision-Centric Toolkit
 
-Utilities for generating shuffled jigsaw puzzles (input images plus metadata) and compact 4x4 Sudoku board challenges, along with evaluators for verifying model reconstructions.
+This repository hosts the assets behind the vision-centric portion of the “Thinking with Video” study. It covers the eyeballing puzzles, ARC-AGI-2 abstractions, and maze families used to evaluate Sora-2 and contemporary VLMs within VideoThinkBench. Text-centric benchmarks and visual puzzle variations live elsewhere to keep this codebase focused on spatial reasoning through video generation.
 
-## Setup
+## Getting started
 
-```
+```bash
 python -m venv .venv
-# macOS/Linux
 source .venv/bin/activate
-# Windows
-.venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Generating jigsaw puzzles
+All generators and evaluators run on Python 3.10+. Optional dependencies such as Whisper, ffmpeg, and GPU-accelerated OpenCV improve throughput for large batches but are not required for small experiments.
 
-Run the generator CLI to download random images from https://picsum.photos, slice them into a grid, scatter the tiles, and store metadata and images on disk.
+## Repository layout
 
-```
-python -m puzzle.jigsaw.generator 5 --rows 3 --cols 3 --size 512 512 --output-dir data/jigsaw --metadata data/jigsaw/data.json --prompt "Solve the jigsaw puzzle" --seed 42
-```
+- `puzzle/`: generators and evaluators for the three task families.
+	- Eyeballing puzzles live in directories named after the geometric target (`circle_center/`, `angle_bisector/`, …).
+	- ARC-AGI-2 abstractions are implemented in `arcagi/`.
+	- Maze variants (`maze/`, `maze_hexagon/`, `maze_labyrinth/`) share common helpers in `maze_base.py`.
+- `data/`: default output root. Contains released examples, voting summaries, and intermediate artifacts.
+- `scripts/`: orchestration utilities for bulk generation, multi-sample voting, transcription, and result summaries.
+- `dataset/`, `dataset_easy/`, `dataset_difficult/`: curated splits referenced in the paper.
 
-Key outputs per puzzle:
+> **Note**: The repository still carries earlier puzzle prototypes (jigsaw, Sudoku, mirror, rectangles, etc.). They are preserved for completeness but were not part of the published experiments.
 
-- data/original/<id>_original.png: solved reference image.
-- data/inputs/<id>_input.png: scattered puzzle layout for the model input.
-- data/data.json: metadata records with id, source URL, prompt, grid definition, per-piece bounding boxes, and scatter layout.
+## Eyeballing puzzles
 
-You can also build a puzzle from a local image:
+Eyeballing puzzles require the model to mark the correct geometric element from five options while optionally verbalizing the choice. We evaluate three groups:
 
-```
-from puzzle.jigsaw import JigsawGenerator
+- **Point Tasks**: `circle_center`, `circumcenter`, `fermat_point`, `incenter`, `midpoint`, `orthocenter`, `point_reflection`, `ray_intersection`, `triangle_center`.
+- **Line Tasks**: `angle_bisector`, `arc_connect`, `circle_tangent_line`, `circle_tangent_point`, `parallel`, `perpendicular`, `perpendicular_bisector`, `ray_reflect`.
+- **Shape Tasks**: `isosceles_trapezoid`, `parallelogram`, `right_triangle`, `square_outlier`.
 
-gen = JigsawGenerator(output_dir="data", rows=4, cols=4)
-record = gen.create_puzzle_from_path("my_image.jpg")
-```
+Each task inherits from the shared point-target scaffolding in `point_target_base.py`, so the CLI and output layout are consistent.
 
-## Evaluating jigsaw outputs
+### Generate puzzles
 
-Given a stored puzzle id and a candidate solution image (for example the final frame from a model), run the evaluator. It trims borders, resizes to the reference dimensions, compares per-tile similarity, and reports accuracy.
-
-```
-python -m puzzle.jigsaw.evaluator data/data.json <PUZZLE_ID> path/to/model_output.png --threshold 0.92 --trim-tolerance 10
-```
-
-Example JSON result:
-
-```
-{
-  "puzzle_id": "...",
-  "correct_pieces": 8,
-  "total_pieces": 9,
-  "accuracy": 0.8889,
-  "per_piece": [
-    {"piece_id": "0-0", "similarity": 0.99, "is_correct": true},
-    {"piece_id": "0-1", "similarity": 0.85, "is_correct": false}
-  ]
-}
+```bash
+python -m puzzle.circle_center.generator 25 --output-dir data/circle_center --seed 2025
 ```
 
-Adjust --threshold to control tolerance for per-piece correctness. The default similarity metric uses 1 - mean absolute error between RGB tiles (scaled to [0,1]).
+Common flags:
 
-## Generating Sudoku puzzles
+- `count`: number of puzzles to create.
+- `--canvas-width` and `--aspect`: customize resolution. Aspect controls portrait vs. landscape layout.
+- `--prompt`: override the default instruction. Use `--use-gpt-5` to inject the multiple-choice wording used for GPT-5 baselines.
 
-```
-python -m puzzle.sudoku.generator 10 --output-dir data/sudoku --clue-target 12 --seed 7
-```
+Metadata is stored in `<output-dir>/data.json`, while puzzles and reference solutions land in `puzzles/` and `solutions/` subfolders.
 
-Artifacts per puzzle:
-- Sudoku clues remain black in both puzzle and solution images; filled cells are rendered in blue for clarity.
+### Evaluate predictions
 
-- data/sudoku/puzzles/<id>_puzzle.png: printable puzzle grid with blanks.
-- use `--aspect-ratio` to add black padding around the outer border while keeping the inner grid square.
-- data/sudoku/solutions/<id>_solution.png: colored solution grid for reference.
-- data/sudoku/data.json: metadata storing puzzle/solution grids, clue counts, and prompts.
-
-Programmatic example:
-
-```
-from puzzle.sudoku import SudokuGenerator
-
-gen = SudokuGenerator(output_dir="data/sudoku", clue_target=10, seed=101)
-record = gen.create_puzzle()
+```bash
+python -m puzzle.circle_center.evaluator data/circle_center/data.json <PUZZLE_ID> attempts/0001/final.png --video-stride 3
 ```
 
-## Evaluating Sudoku solutions
+The evaluator reports the option inferred from:
 
-Provide the evaluator with the metadata file, puzzle id, and a candidate solution image (final frame from the model or a rendered board).
+- the red highlight in the candidate image,
+- parsed captions or transcripts located next to the attempt,
+- sampled frames from the accompanying video.
 
-```
-python -m puzzle.sudoku.evaluator data/sudoku/data.json <PUZZLE_ID> candidate.png
-```
+Most leaderboard scores quoted in the paper use majority voting over frames (“Major Frame”), last-frame inspection, or the audio transcript.
 
-The evaluator trims borders, rescales the candidate to the reference solution, reads the digit in each cell, and reports accuracy plus invalid positions.
+Batch utilities in `scripts/generate_and_vote.py`, `scripts/gen_point.sh`, and `scripts/run_point.sh` automate multi-sample evaluation for all point/line/shape tasks.
 
-## Generating mirror puzzles
+## ARC-AGI-2 abstractions
 
-```
-python -m puzzle.mirror.generator 10 --output-dir data/mirror --rows 6 --cols 8 --cell-size 48 --fill 0.6 --seed 7 --monochrome
-```
+Our ARC implementation turns few-shot grid reasoning into a video-friendly format: training exemplars appear on the left, the target input is rendered on the right, and the answer grid remains blank for the model to fill.
 
-Outputs:
-- data/mirror/puzzles/<id>_puzzle.png: left half colored, right half blank.
-- add `--monochrome` to keep a single hue across all filled cells.
-- use `--aspect-ratio` to add black padding around the outer border.
-- data/mirror/solutions/<id>_solution.png: full mirrored grid reference.
-- data/mirror/data.json: metadata with per-cell colors and layout details.
-
-## Evaluating mirror outputs
-
-```
-python -m puzzle.mirror.evaluator data/mirror/data.json <PUZZLE_ID> candidate.png --color-tolerance 20
+```bash
+python -m puzzle.arcagi.generator 10 --dataset data/training --output-dir data/arcagi --seed 17
+python -m puzzle.arcagi.evaluator data/arcagi/data.json <PUZZLE_ID> attempts/arcagi/final.png
 ```
 
-Each right-half cell is compared against its mirrored counterpart by averaging RGB values and measuring color distance.
+Key helpers:
 
-## Generating rectangles stacking puzzles
+- `scripts/generate_all_arc_puzzles.py`: bulk generation across the curated task list used in VideoThinkBench.
+- `scripts/arcagi_range_vote.py`: aggregates self-consistency runs (supports GPT-5, Claude 4.5, Gemini 2.5 Pro, and Sora-2 outputs). The paper’s ablations rely on these ranges.
 
-```
-python -m puzzle.rects.generator 5 --output-dir data/rects --rect-count 4 --canvas-size 512
-```
+Evaluation converts colored cells back to ARC palette indices and prints JSON with per-cell agreement, enabling downstream voting or qualitative review.
 
-Every record stores overlapping rectangles with a defined z-order along with a prompt instructing models to explode the stack vertically and speak the color order (blue, green, purple, red) from top to bottom.
+## Maze families
 
-## Evaluating rectangles answers
+Maze benchmarks test dynamic path drawing. Three generators ship in this repo:
 
-```
-python -m puzzle.rects.evaluator data/rects/data.json <PUZZLE_ID> attempt/final.png --speech-mode auto --speech-engine local --whisper-model base
-```
+- `puzzle.maze.generator`: rectangular grids.
+- `puzzle.maze_hexagon.generator`: hex-tiling mazes.
+- `puzzle.maze_labyrinth.generator`: labyrinth variants with preset motifs.
 
-- The evaluator still scores the visual ordering by extracting the dominant color per band and comparing it to metadata.
-- When audio or video is present in the same attempt directory (or provided via `--speech-media`), the evaluator transcribes the spoken response and records the color words in sequence.
-- Speech transcription works with either local Whisper (`--speech-engine local`) or an API endpoint (`--speech-engine api --speech-model whisper-1 --speech-base-url ...`).
-- Evaluation results now include both the RGB order and the spoken color names so voting scripts can fall back to the audio transcript when images are missing.
-
-## Notes
-
-- Sudoku OCR relies on Tesseract via `pytesseract`; install the Tesseract binary and ensure it is available on PATH.
-- Jigsaw puzzles fetch images from the network; ensure outbound access or rely on `create_puzzle_from_path` for offline use.
-- Sudoku generation enforces uniqueness by default; use `--no-unique` to accelerate dataset builds when uniqueness is not required.
-- Scatter layout avoids overlaps via random sampling with a deterministic fallback when space is tight.
-- Similarity metrics are lightweight; replace `_piece_similarity` (jigsaw) or Sudoku validation helpers with stronger perceptual or domain-specific checks if tighter validation is required.
-
-## Generating ARC puzzles
-
-```
-python -m puzzle.arcagi.generator 5 --dataset data/training --output-dir data/arcagi --metadata data/arcagi/data.json --cell-size 28
+```bash
+python -m puzzle.maze.generator 20 --output-dir data/maze --rows 21 --cols 21 --cell-size 32
+python -m puzzle.maze.evaluator data/maze/data.json <PUZZLE_ID> attempts/maze/final.png
 ```
 
-Each puzzle image renders every training example as an input/output pair with an arrow pointing from example input to example output. The first evaluation pair is shown with its input grid and a blank answer grid. The matching solution image fills in the correct test output.
-
-Artifacts per puzzle:
-- data/arcagi/puzzles/<id>_puzzle.png: composite image with examples and blank test output.
-- data/arcagi/solutions/<id>_solution.png: identical layout with the correct test output filled in.
-- data/arcagi/data.json: metadata that records the task source and grid placements (including the test output region).
-
-## Evaluating ARC outputs
-
-```
-python -m puzzle.arcagi.evaluator data/arcagi/data.json <PUZZLE_ID> candidate.png
-```
-
-The evaluator aligns the candidate image to the puzzle layout, reads the coloured cells from the test output region, maps RGB values back to ARC palette digits, and compares them to the ground-truth grid.
-
-## Generating maze puzzles
-
-```
-python -m puzzle.maze.generator 5 --output-dir data/maze --rows 15 --cols 15 --cell-size 32 --aspect-ratio 1.7777
-```
-
-Each maze shows black walls, a red start cell, and a green goal cell. The prompt tells the model to draw a single red line from start to goal while staying on the white passages. Solution images include the reference path, but the puzzle frames remain blank so models must supply the line.
-
-Artifacts per puzzle:
-- data/maze/puzzles/<id>_puzzle.png: maze without the path.
-- data/maze/solutions/<id>_solution.png: same maze with the red reference path.
-- data/maze/data.json: metadata with the maze grid, start/goal coordinates, padding, and bounding boxes for each cell.
-
-## Evaluating maze outputs
-
-```
-python -m puzzle.maze.evaluator data/maze/data.json <PUZZLE_ID> candidate.png
-```
-
-The evaluator aligns the candidate image, checks that a continuous red path connects the start and goal cells, and verifies that no red pixels spill into wall cells.
+Mazes highlight the start cell in red and the goal in green. The evaluator verifies that a continuous red stroke connects them without bleeding into walls. `scripts/maze_summary.py` collects aggregate accuracy from batches of attempts.
 
 
+## Legacy generators not in the paper
+
+Directories such as `puzzle/jigsaw/`, `puzzle/sudoku/`, `puzzle/mirror/`, and `puzzle/rects/` remain in the tree for archival reasons. They can still be executed with the same CLI pattern as before, but their outputs were not included in the “Thinking with Video” results. 
 
 
