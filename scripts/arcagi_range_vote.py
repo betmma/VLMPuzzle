@@ -5,9 +5,11 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Counter, Dict, List, Sequence, Optional
+from typing import Any, Counter, Dict, List, Optional
+
 import numpy as np
-from PIL import Image
+import re
+from PIL import Image, ImageDraw
 
 # Ensure repository root is on sys.path
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +17,113 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from puzzle.arcagi import ArcPuzzleEvaluator
+from puzzle.arcagi.evaluator import ARC_PALETTE
 from veo3 import generate_video_output_multiple_tries, generate_video_outputs_multiprocess
+from gpt5 import generate_multiple_tries as generate_gpt5_multiple_tries, generate_outputs_multiprocess
+
+GPT5_PROMPT = (
+    "Each row contains input and output grids. Learn the pattern and generate the output grid for the last input. "
+    "Color palette: 0: black\n1: blue\n2: red\n3: green\n4: yellow\n5: gray\n6: magenta\n7: orange\n8: cyan\n9: brown. "
+    "Output a row-major 2d array representing the output grid, with each element an integer from 0 to 9."
+)
+
+
+def _parse_bracket_grid(text: str) -> Optional[List[List[int]]]:
+    # Use regex to extract the last [[...]] block (dot matches newlines)
+    compact = text.replace(" ", "").replace("\n", "").replace("\r", "")
+    matches = re.findall(r"\[\[.+?\]\]", compact, flags=re.DOTALL)
+    if not matches:
+        return None
+    expr = matches[-1]
+    try:
+        grid = eval(expr)
+    except Exception:
+        return None
+
+    return grid
+
+def _copy_input_as_result(source_image: Path, destination: Path) -> Path:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_image, destination)
+    return destination
+
+def _render_grid_to_image(
+    grid: List[List[int]],
+    evaluator: ArcPuzzleEvaluator,
+    record: Dict[str, Any],
+    input_image: Path,
+    destination: Path,
+) -> Path:
+    base_image = Image.open(input_image).convert("RGB")
+    result_image = base_image.copy()
+    placements = record["placements"]
+    x0, y0, x1, y1 = evaluator._find_test_bbox(placements) 
+    cell_size = record["cell_size"]
+    draw = ImageDraw.Draw(result_image)
+    for row_index, row in enumerate(grid):
+        for col_index, value in enumerate(row):
+            color = ARC_PALETTE.get(int(value), ARC_PALETTE[0])
+            left = x0 + col_index * cell_size
+            top = y0 + row_index * cell_size
+            right = left + cell_size
+            bottom = top + cell_size
+            draw.rectangle(((left, top), (right - 1, bottom - 1)), fill=color)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    result_image.save(destination)
+    return destination
+
+
+def ensure_gpt5_result_image(
+    evaluator: ArcPuzzleEvaluator,
+    puzzle_id: str,
+    output_dir: Path,
+    input_image_path: Path,
+) -> Path:
+    output_dir = Path(output_dir)
+    result_path = output_dir / "result.png"
+    if result_path.exists():
+        return result_path
+    text_sources = [
+        output_dir / "content.txt",
+        output_dir / "original_content.txt",
+    ]
+    text_payload = ""
+    for candidate in text_sources:
+        if candidate.exists():
+            payload = candidate.read_text(encoding="utf-8")
+            if payload:
+                text_payload = payload
+                break
+    record = evaluator.get_record(puzzle_id)
+    input_image = Path(input_image_path)
+    grid = _parse_bracket_grid(text_payload) 
+    if grid is None:
+        return _copy_input_as_result(input_image, result_path)
+    return _render_grid_to_image(grid, evaluator, record, input_image, result_path)
+
+
+def _extract_puzzle_id_from_input_file(input_file: Path) -> Optional[str]:
+    if not input_file.exists():
+        return None
+    text = input_file.read_text(encoding="utf-8")
+    marker = "Input image path:"
+    marker_index = text.find(marker)
+    if marker_index == -1:
+        return None
+    remaining = text[marker_index + len(marker):].lstrip()
+    if not remaining:
+        return None
+    lines = remaining.splitlines()
+    if not lines:
+        return None
+    path_text = lines[0].strip()
+    if not path_text:
+        return None
+    puzzle_stem = Path(path_text).stem
+    suffix = "_puzzle"
+    if puzzle_stem.endswith(suffix):
+        return puzzle_stem[: -len(suffix)]
+    return puzzle_stem
 
 
 def read_metadata(path: Path) -> List[Dict[str, Any]]:
@@ -47,6 +155,53 @@ def resolve_image_path(metadata_path: Path, relative_path: str) -> Path:
 def write_json(path: Path, payload: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _gather_existing_output_dirs(existing_root: Path, allowed_ids: List[str]) -> Dict[str, List[Path]]:
+    if not existing_root.exists():
+        raise FileNotFoundError(f"Existing output root not found: {existing_root}")
+    mapping: Dict[str, List[Path]] = {pid: [] for pid in allowed_ids}
+    for entry in sorted(existing_root.iterdir()):
+        if not entry.is_dir():
+            continue
+        input_file = entry / "input.txt"
+        puzzle_id = _extract_puzzle_id_from_input_file(input_file)
+        if puzzle_id is None:
+            continue
+        if puzzle_id in mapping:
+            mapping[puzzle_id].append(entry)
+    for pid in mapping:
+        mapping[pid].sort()
+    return mapping
+
+
+def _write_evaluation_artifacts(
+    evaluator: ArcPuzzleEvaluator,
+    puzzle_id: str,
+    result_png: Path,
+    output_dir: Path,
+    run_dir: Path,
+    attempt_index: int,
+) -> Dict[str, Any]:
+    eval_result = evaluator.evaluate(puzzle_id, result_png)
+    eval_dict = eval_result.to_dict()
+    attempt_dir = run_dir / f"attempt_{attempt_index:02d}"
+    attempt_dir.mkdir(parents=True, exist_ok=True)
+    vote_result_png = attempt_dir / "result.png"
+    shutil.copy2(result_png, vote_result_png)
+    evaluation_record: Dict[str, Any] = {
+        "attempt": attempt_index,
+        "puzzle_id": puzzle_id,
+        "output_directory": output_dir.as_posix(),
+        "result_png": result_png.as_posix(),
+        "vote_run_directory": run_dir.as_posix(),
+        "vote_output_directory": attempt_dir.as_posix(),
+        "vote_result_png": vote_result_png.as_posix(),
+        "evaluation": eval_dict,
+    }
+    write_json(output_dir / "evaluation.json", evaluation_record)
+    write_json(attempt_dir / "evaluation.json", evaluation_record)
+    return evaluation_record
 
 
 def process_puzzle(
@@ -88,29 +243,23 @@ def process_puzzle(
         output_dir = Path(out_dir_str).resolve()
         result_png = output_dir / "result.png"
         if not result_png.exists():
+            result_png = ensure_gpt5_result_image(
+                evaluator,
+                puzzle_id,
+                output_dir,
+                puzzle_img,
+            )
+        if not result_png.exists():
             raise FileNotFoundError(f"Expected result frame not found at {result_png}")
 
-        eval_result = evaluator.evaluate(puzzle_id, result_png)
-        eval_dict = eval_result.to_dict()
-
-        attempt_dir = run_dir / f"attempt_{attempt_idx:02d}"
-        attempt_dir.mkdir(parents=True, exist_ok=True)
-        vote_result_png = attempt_dir / "result.png"
-        shutil.copy2(result_png, vote_result_png)
-
-        evaluation_record: Dict[str, Any] = {
-            "attempt": attempt_idx,
-            "puzzle_id": puzzle_id,
-            "output_directory": output_dir.as_posix(),
-            "result_png": result_png.as_posix(),
-            "vote_run_directory": run_dir.as_posix(),
-            "vote_output_directory": attempt_dir.as_posix(),
-            "vote_result_png": vote_result_png.as_posix(),
-            "evaluation": eval_dict,
-        }
-
-        write_json(output_dir / "evaluation.json", evaluation_record)
-        write_json(attempt_dir / "evaluation.json", evaluation_record)
+        evaluation_record = _write_evaluation_artifacts(
+            evaluator,
+            puzzle_id,
+            result_png,
+            output_dir,
+            run_dir,
+            attempt_idx,
+        )
         results.append(evaluation_record)
 
     # also write a run manifest
@@ -254,6 +403,17 @@ def parse_args(argv = None) -> argparse.Namespace:
         help="Average per-pixel RGB Euclidean distance threshold to count an attempt as 'no change' in the designed output area",
     )
     parser.add_argument("--processes", type=int, default=None, help="Worker processes for parallelizing across puzzles")
+    parser.add_argument(
+        "--use-gpt-5",
+        action="store_true",
+        help="Generate outputs with GPT-5 instead of the default VEO3 backend",
+    )
+    parser.add_argument(
+        "--existing-output-root",
+        type=Path,
+        default=None,
+        help="Evaluate pre-generated outputs under this directory instead of generating new results",
+    )
     return parser.parse_args(list(argv) if argv is not None else None)
 
 
@@ -304,71 +464,104 @@ def main(argv = None) -> None:
     vote_root = args.vote_root.resolve()
     vote_root.mkdir(parents=True, exist_ok=True)
 
-    # Prepare per-puzzle run directories once
     run_dirs: Dict[str, Path] = {}
-    for record in slice_records:
-        pid = str(record.get("id") or "")
-        if not pid:
-            raise ValueError("Record missing 'id'")
-        run_dirs[pid] = prepare_run_dir(pid, vote_root)
-
-    # Accumulate results per puzzle to write manifests at the end
-    per_puzzle_results: Dict[str, List[Dict[str, Any]]] = {str(r.get("id")): [] for r in slice_records}
-
-    # Resolve image paths and prompts once
+    per_puzzle_results: Dict[str, List[Dict[str, Any]]] = {}
+    image_paths_by_id: Dict[str, Path] = {}
     imgs: List[str] = []
     prompts: List[str] = []
     ids: List[str] = []
     for record in slice_records:
-        pid = str(record.get("id") or "")
-        prompt = (record.get("prompt") or "").strip()
-        if not prompt:
-            raise ValueError(f"Puzzle {pid} has no prompt text")
-        img_rel = record.get("image")
-        if not isinstance(img_rel, str) or not img_rel:
-            raise ValueError(f"Puzzle {pid} missing image")
-        img_path = resolve_image_path(metadata_path, img_rel)
-        if not img_path.exists():
-            raise FileNotFoundError(f"Puzzle image not found: {img_path}")
-        imgs.append(img_path.as_posix())
-        prompts.append(prompt)
-        ids.append(pid)
+        pid_value = str(record["id"])
+        if not pid_value:
+            raise ValueError("Record missing 'id'")
+        prompt_value = record["prompt"]
+        if not isinstance(prompt_value, str):
+            raise ValueError(f"Puzzle {pid_value} prompt must be a string")
+        prompt_text = prompt_value.strip()
+        image_rel = record["image"]
+        if not isinstance(image_rel, str) or not image_rel:
+            raise ValueError(f"Puzzle {pid_value} missing image")
+        image_path = resolve_image_path(metadata_path, image_rel)
+        if not image_path.exists():
+            raise FileNotFoundError(f"Puzzle image not found: {image_path}")
+        run_dirs[pid_value] = prepare_run_dir(pid_value, vote_root)
+        per_puzzle_results[pid_value] = []
+        image_paths_by_id[pid_value] = image_path
+        if not args.use_gpt_5 and args.existing_output_root is None and not prompt_text:
+            raise ValueError(f"Puzzle {pid_value} has no prompt text")
+        imgs.append(image_path.as_posix())
+        prompts.append(GPT5_PROMPT if args.use_gpt_5 else prompt_text)
+        ids.append(pid_value)
+
+    if args.existing_output_root is not None:
+        existing_root = args.existing_output_root.resolve()
+        per_puzzle_dirs = _gather_existing_output_dirs(existing_root, ids)
+        for pid in ids:
+            directories = per_puzzle_dirs[pid]
+            for attempt_idx, output_dir in enumerate(directories, start=1):
+                result_png = output_dir / "result.png"
+                if not result_png.exists():
+                    result_png = ensure_gpt5_result_image(
+                        evaluator,
+                        pid,
+                        output_dir,
+                        image_paths_by_id[pid],
+                    )
+                if not result_png.exists():
+                    raise FileNotFoundError(f"Expected result frame not found at {result_png}")
+                evaluation_record = _write_evaluation_artifacts(
+                    evaluator,
+                    pid,
+                    result_png,
+                    output_dir,
+                    run_dirs[pid],
+                    attempt_idx,
+                )
+                per_puzzle_results[pid].append(evaluation_record)
+        for pid, results in per_puzzle_results.items():
+            write_json(run_dirs[pid] / "run_manifest.json", {"puzzle_id": pid, "attempts": len(results), "results": results})
+        print("Done.")
+        return
 
     total = len(ids)
     for attempt_idx in range(1, args.k + 1):
         print(f"Batch generating attempt {attempt_idx}/{args.k} for {total} puzzles...")
-        outs = generate_video_outputs_multiprocess(
-            imgs,
-            prompts,
-            processes=args.processes,
-            attempts=3,  # internal retries per item
-        )
+        if args.use_gpt_5:
+            outs = generate_outputs_multiprocess(
+                imgs,
+                prompts,
+                processes=args.processes,
+                attempts=3,
+            )
+        else:
+            outs = generate_video_outputs_multiprocess(
+                imgs,
+                prompts,
+                processes=args.processes,
+                attempts=3,  # internal retries per item
+            )
         for i, out_dir in enumerate(outs):
             pid = ids[i]
             output_dir = Path(out_dir).resolve()
-            result_png = output_dir / "result.png"
+            if args.use_gpt_5:
+                result_png = ensure_gpt5_result_image(
+                    evaluator,
+                    pid,
+                    output_dir,
+                    image_paths_by_id[pid],
+                )
+            else:
+                result_png = output_dir / "result.png"
             if not result_png.exists():
                 raise FileNotFoundError(f"Expected result frame not found at {result_png}")
-            eval_result = evaluator.evaluate(pid, result_png)
-            eval_dict = eval_result.to_dict()
-
-            attempt_dir = run_dirs[pid] / f"attempt_{attempt_idx:02d}"
-            attempt_dir.mkdir(parents=True, exist_ok=True)
-            vote_result_png = attempt_dir / "result.png"
-            shutil.copy2(result_png, vote_result_png)
-
-            evaluation_record: Dict[str, Any] = {
-                "attempt": attempt_idx,
-                "puzzle_id": pid,
-                "output_directory": output_dir.as_posix(),
-                "result_png": result_png.as_posix(),
-                "vote_run_directory": run_dirs[pid].as_posix(),
-                "vote_output_directory": attempt_dir.as_posix(),
-                "vote_result_png": vote_result_png.as_posix(),
-                "evaluation": eval_dict,
-            }
-            write_json(output_dir / "evaluation.json", evaluation_record)
-            write_json(attempt_dir / "evaluation.json", evaluation_record)
+            evaluation_record = _write_evaluation_artifacts(
+                evaluator,
+                pid,
+                result_png,
+                output_dir,
+                run_dirs[pid],
+                attempt_idx,
+            )
             per_puzzle_results[pid].append(evaluation_record)
 
     # Write per-puzzle run manifests

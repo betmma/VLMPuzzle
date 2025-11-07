@@ -1,7 +1,7 @@
 from veo3 import call_api_raw,prepare_image_data,create_output_directory,API_KEY,BASE_URL,API_TIMEOUT,USE_STREAM,call_openai_with_retry,client,save_mixed_content
-import os,time,json
+import os,time,json,multiprocessing as _mp
 
-MODEL_NAME = "claude-sonnet-4-5-20250929-thinking"
+MODEL_NAME = "gemini-2.5-pro"
 
 def generate(input_image_path, prompt_text)->str:
     """use gpt-5 to process images with prompt_text, return response content and output directory"""
@@ -102,6 +102,28 @@ def generate_multiple_tries(input_image_path, prompt_text, attempts=3):
                 print("稍后重试...")
                 time.sleep(2)
     return result
+
+def _mp_worker_generate(arg_tuple):
+    input_image_path, prompt_text, attempts = arg_tuple
+    if attempts and attempts > 1:
+        return generate_multiple_tries(input_image_path, prompt_text, attempts=attempts)
+    return generate(input_image_path, prompt_text)
+
+def generate_outputs_multiprocess(image_paths_list, prompt_texts, processes=None, attempts=1, chunksize=1):
+    if not isinstance(image_paths_list, (list, tuple)) or not isinstance(prompt_texts, (list, tuple)):
+        raise TypeError("image_paths_list and prompt_texts must be lists/tuples")
+    if len(image_paths_list) != len(prompt_texts):
+        raise ValueError("image_paths_list and prompt_texts must have the same length")
+    if attempts is None or attempts < 1:
+        attempts = 1
+
+    tasks = [(image_paths_list[i], prompt_texts[i], attempts) for i in range(len(prompt_texts))]
+
+    ctx = _mp.get_context("spawn")
+    with ctx.Pool(processes=processes) as pool:
+        results = pool.map(_mp_worker_generate, tasks, chunksize=chunksize)
+
+    return results
 
 if __name__ == "__main__":
     pass
