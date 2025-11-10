@@ -4,6 +4,7 @@
 
 # Define an array of all the puzzle names to process
 PUZZLES=(
+    'arc_connect_point_ver'
     "ray_intersection"
     "midpoint"
     "parallelogram"

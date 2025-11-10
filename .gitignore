@@ -4,3 +4,4 @@ api_key.txt
 dataset*/*
 debug/*
 dataset.zip
+*.tar.gz
