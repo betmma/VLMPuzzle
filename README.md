@@ -25,6 +25,13 @@ All generators and evaluators run on Python 3.10+. Optional dependencies such as
 
 > **Note**: The repository still carries earlier puzzle prototypes (jigsaw, Sudoku, mirror, rectangles, etc.). They are preserved for completeness but were not part of the published experiments.
 
+## General scripts
+
+`scripts/veo3.py` and `scripts/gpt5.py` call corresponding API to get model generations. `veo3.py` is for video generation models, and `gpt5.py` is for VLMs.
+`scripts/mirrorVote.py` generates multiple responses for one puzzle.
+`scripts/generate_and_vote.py` generates new puzzles and calls mirrorVote.py to generate the responses.
+set --use-gpt-5 or [use_gpt_5] when running the above two scripts for VLMs.
+
 ## Eyeballing puzzles
 
 Eyeballing puzzles require the model to mark the correct geometric element from five options while optionally verbalizing the choice. We evaluate three groups:
@@ -63,7 +70,7 @@ The evaluator reports the option inferred from:
 
 Most leaderboard scores quoted in the paper use majority voting over frames (“Major Frame”), last-frame inspection, or the audio transcript.
 
-Batch utilities in `scripts/generate_and_vote.py`, `scripts/gen_point.sh`, and `scripts/run_point.sh` automate multi-sample evaluation for all point/line/shape tasks.
+Batch utilities in `scripts/gen_point.sh`, `scripts/run_point.sh` and `scripts/multiple_choice_summary.py` automate multi-sample generation, evaluation and summary for all point/line/shape tasks.
 
 ## ARC-AGI-2 abstractions
 
@@ -94,7 +101,7 @@ python -m puzzle.maze.generator 20 --output-dir data/maze --rows 21 --cols 21 --
 python -m puzzle.maze.evaluator data/maze/data.json <PUZZLE_ID> attempts/maze/final.png
 ```
 
-Mazes highlight the start cell in red and the goal in green. The evaluator verifies that a continuous red stroke connects them without bleeding into walls. `scripts/maze_summary.py` collects aggregate accuracy from batches of attempts.
+Mazes highlight the start cell and the goal in red. The evaluator verifies that a continuous red stroke connects them without bleeding into walls. `scripts/maze_summary.py` collects aggregate accuracy from batches of attempts.
 
 
 ## Legacy generators not in the paper
