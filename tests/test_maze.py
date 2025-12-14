@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from puzzle.maze import MazeGenerator, MazeEvaluator
+from puzzle.maze_square import MazeGenerator, MazeEvaluator
 
 
 class MazeEvaluatorTests(unittest.TestCase):

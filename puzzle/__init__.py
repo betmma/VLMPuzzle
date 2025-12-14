@@ -82,7 +82,7 @@ from .arcagi import (
     ArcEvaluationResult,
     ArcCellEvaluation,
 )
-from .maze import (
+from .maze_square import (
     MazeGenerator,
     MazeEvaluator,
     MazePuzzleRecord,

@@ -19,9 +19,8 @@ All generators and evaluators run on Python 3.10+. Optional dependencies such as
 	- Eyeballing puzzles live in directories named after the geometric target (`circle_center/`, `angle_bisector/`, …).
 	- ARC-AGI-2 abstractions are implemented in `arcagi/`.
 	- Maze variants (`maze/`, `maze_hexagon/`, `maze_labyrinth/`) share common helpers in `maze_base.py`.
-- `data/`: default output root. Contains released examples, voting summaries, and intermediate artifacts.
+- `data/`: default output root.
 - `scripts/`: orchestration utilities for bulk generation, multi-sample voting, transcription, and result summaries.
-- `dataset/`, `dataset_easy/`, `dataset_difficult/`: curated splits referenced in the paper.
 
 > **Note**: The repository still carries earlier puzzle prototypes (jigsaw, Sudoku, mirror, rectangles, etc.). They are preserved for completeness but were not part of the published experiments.
 
@@ -31,6 +30,16 @@ All generators and evaluators run on Python 3.10+. Optional dependencies such as
 `scripts/mirrorVote.py` generates multiple responses for one puzzle.
 `scripts/generate_and_vote.py` generates new puzzles and calls mirrorVote.py to generate the responses.
 set --use-gpt-5 or [use_gpt_5] when running the above two scripts for VLMs.
+`scripts/fixed_dataset.py` evaluates puzzles on fixed dataset instead of generating new puzzles. Our dataset and mini testset can be found ![here](https://huggingface.co/datasets/OpenMOSS-Team/VideoThinkBench). Ensure the files are arranged as example below:
+
+- `dataset/`: arbitrary folder name.
+	- `maze_square/`: puzzle type name.
+		- `puzzles/`: input images of puzzles.
+		- `solutions/`: solution images of puzzles.
+		- `data.json`: data of puzzles.
+	- `.../`: other puzzle types, with same `puzzles/` `solutions/` and `data.json` inside.
+
+Then run `scripts/fixed_dataset.py`, for example `python scripts/fixed_dataset.py --dataset-root dataset --workers 16 --resume` to evaluate on a fixed dataset.
 
 ## Eyeballing puzzles
 
@@ -70,7 +79,9 @@ The evaluator reports the option inferred from:
 
 Most leaderboard scores quoted in the paper use majority voting over frames (“Major Frame”), last-frame inspection, or the audio transcript.
 
-Batch utilities in `scripts/gen_point.sh`, `scripts/run_point.sh` and `scripts/multiple_choice_summary.py` automate multi-sample generation, evaluation and summary for all point/line/shape tasks.
+Batch utilities in `scripts/gen_point.sh` and `scripts/multiple_choice_summary.py` automate multi-sample generation and summary for all point/line/shape tasks.
+
+`scripts/run_point.sh` calls `scripts/generate_and_vote.py` that generates new puzzles for multiple puzzle types and then evaluate them.
 
 ## ARC-AGI-2 abstractions
 
