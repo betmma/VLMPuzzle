@@ -477,7 +477,7 @@ def summarize_all(vote_root: Path, top_misses: int) -> bool:
         any_found = any_found or found
 
     print()
-    _summarize_key_correlations(multi_attempts)
+    # _summarize_key_correlations(multi_attempts)
     return any_found
 
 def main() -> None:

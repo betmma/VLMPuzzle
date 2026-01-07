@@ -192,7 +192,7 @@ def main() -> None:
         records.append(record_dict)
         print(f"[{index}/{len(task_paths)}] generated {puzzle_id} (difficulty={difficulty:.2f})")
 
-    records.sort(key=lambda item: (item["difficulty"], item["id"]))
+    # records.sort(key=lambda item: (item["difficulty"], item["id"]))
 
     metadata_path.write_text(json.dumps(records, indent=2), encoding="utf-8")
     print(f"Wrote {len(records)} puzzles to {metadata_path}")
