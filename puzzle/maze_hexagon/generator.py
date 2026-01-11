@@ -8,9 +8,9 @@ from collections import deque
 from pathlib import Path
 from typing import Deque, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
-from ..maze_base import MazePuzzleGenerator, MazePuzzleRecord
+from ..maze_base import MazePuzzleGenerator, MazePuzzleRecord, draw_path_line
 
 # Rendering palette
 PATH_COLOR = (240, 240, 240)
@@ -19,6 +19,7 @@ START_COLOR = (220, 30, 30)
 GOAL_COLOR = START_COLOR
 LINE_COLOR = (220, 0, 0)
 BACKGROUND_COLOR = (16, 16, 16)
+TEXT_COLOR = (0, 0, 255)
 
 Axial = Tuple[int, int]
 
@@ -64,6 +65,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         prompt: Optional[str] = None,
         canvas_width: Optional[int] = None,
         aspect: Optional[float] = None,
+        show_cell_id: bool = False,
     ) -> None:
         if radius < 2:
             raise ValueError("radius must be at least 2")
@@ -93,6 +95,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         if not self.cells:
             raise ValueError("No cells generated for the requested radius")
         self.cell_set: Set[Axial] = set(self.cells)
+        self.cell_to_id: Dict[Axial, int] = {cell: i for i, cell in enumerate(self.cells)}
 
         self._centers = {cell: self._axial_to_pixel(cell) for cell in self.cells}
         min_x, min_y, max_x, max_y = self._bounds()
@@ -117,6 +120,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
             size=self.cell_radius,
             seed=seed,
             prompt=prompt,
+            show_cell_id=show_cell_id,
         )
 
         self.canvas_width_px = final_width
@@ -200,6 +204,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
                 "wall_thickness": self.wall_thickness,
                 "start_cell": list(start_cell),
                 "goal_cell": list(goal_cell),
+                "solution_path_cell_ids": [self.cell_to_id[cell] for cell in solution],
             },
         )
 
@@ -281,7 +286,11 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         self._draw_marker(draw, start_cell, START_COLOR)
         self._draw_marker(draw, goal_cell, GOAL_COLOR)
         if path:
-            self._draw_solution(draw, path)
+            self._draw_solution(canvas, path)
+
+        if self.show_cell_id:
+            self._draw_cell_ids(draw)
+
         return canvas
 
     def _draw_cell_walls(
@@ -309,12 +318,27 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         bbox = (x - radius, y - radius, x + radius, y + radius)
         draw.ellipse(bbox, fill=color)
 
-    def _draw_solution(self, draw: ImageDraw.ImageDraw, path: Sequence[Axial]) -> None:
+    def _draw_solution(self, image: Image.Image, path: Sequence[Axial]) -> None:
         if len(path) < 2:
             return
         points = [self._cell_center(cell) for cell in path]
         thickness = max(4, int(self.cell_radius * 0.35))
-        draw.line(points, fill=LINE_COLOR, width=thickness, joint="curve")
+        draw_path_line(image, points, LINE_COLOR, thickness)
+
+    def _draw_cell_ids(self, draw: ImageDraw.ImageDraw) -> None:
+        font_size = max(8, int(self.cell_radius * 0.4))
+        try:
+            font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+        except OSError:
+            try:
+                font = ImageFont.truetype("arial.ttf", font_size)
+            except OSError:
+                font = ImageFont.load_default()
+
+        for cell in self.cells:
+            text = str(self.cell_to_id[cell])
+            cx, cy = self._cell_center(cell)
+            draw.text((cx, cy), text, fill=TEXT_COLOR, anchor="mm", font=font)
 
     # ------------------------------------------------------------------
     # Geometry helpers
@@ -372,7 +396,12 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         parser.add_argument("--aspect", type=float, default=None, help="Desired width/height ratio for final canvas")
         parser.add_argument("--seed", type=int, default=None)
         parser.add_argument("--prompt", type=str, default=None)
-        return parser.parse_args(argv)
+        parser.add_argument("--show-cell-id", action="store_true", help="Draw cell IDs on the maze")
+        parser.add_argument("--use-gpt-5", action="store_true", help="Same as --show-cell-id")
+        namespace=parser.parse_args(argv)
+        if namespace.use_gpt_5:
+            namespace.show_cell_id = True
+        return namespace
 
     @classmethod
     def main(cls, argv: Optional[List[str]] = None) -> None:
@@ -390,6 +419,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
             prompt=prompt_arg,
             canvas_width=args.canvas_width,
             aspect=args.aspect,
+            show_cell_id=args.show_cell_id,
         )
         records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
         generator.write_metadata(records, generator.output_dir / "data.json")

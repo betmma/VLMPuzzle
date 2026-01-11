@@ -8,9 +8,9 @@ from collections import deque
 from pathlib import Path
 from typing import Deque, Dict, List, Optional, Sequence, Set, Tuple
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
-from ..maze_base import MazePuzzleGenerator, MazePuzzleRecord
+from ..maze_base import MazePuzzleGenerator, MazePuzzleRecord, draw_path_line
 
 # Colors used for rendering.
 PATH_COLOR = (240, 240, 240)
@@ -19,6 +19,7 @@ START_COLOR = (220, 30, 30)
 GOAL_COLOR = START_COLOR # (40, 180, 80)
 LINE_COLOR = (220, 0, 0)
 BACKGROUND_COLOR = (16, 16, 16)
+TEXT_COLOR = (0, 0, 255)
 
 Cell = Tuple[int, int]
 
@@ -45,6 +46,7 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         prompt: Optional[str] = None,
         canvas_width: Optional[int] = None,
         aspect: Optional[float] = None,
+        show_cell_id: bool = False,
     ) -> None:
         if rings < 2:
             raise ValueError("rings must be at least 2 to form an interesting maze")
@@ -83,6 +85,7 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
             size=self.ring_width,
             seed=seed,
             prompt=prompt,
+            show_cell_id=show_cell_id,
         )
 
         self.canvas_size = self.canvas_width
@@ -172,9 +175,18 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
                 "cells_per_ring": self.cells_per_ring,
                 "start_cell": list(start_cell),
                 "goal_cell": list(goal_cell),
+                "solution_path_cell_ids": [self._get_cell_id(cell) for cell in path_cells],
             },
         )
         return record
+
+    def _get_cell_id(self, cell: Cell) -> int:
+        ring, segment = cell
+        if ring == 0:
+            return 0
+        # Ring 0 has 1 cell.
+        # Rings 1..(ring-1) have self.segments cells each.
+        return 1 + (ring - 1) * self.segments + segment
 
     # ------------------------------------------------------------------
     # Graph construction and traversal
@@ -282,10 +294,15 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         draw = ImageDraw.Draw(canvas)
 
         self._fill_walkways(draw)
+
         self._draw_walls(draw, passages)
         self._draw_markers(draw, start_cell, goal_cell)
         if path:
-            self._draw_solution(draw, path)
+            self._draw_solution(canvas, path)
+        
+        if self.show_cell_id:
+            self._draw_cell_ids(draw)
+            
         return canvas
 
     def _fill_walkways(self, draw: ImageDraw.ImageDraw) -> None:
@@ -380,12 +397,31 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         bbox = (x - radius, y - radius, x + radius, y + radius)
         draw.ellipse(bbox, fill=color)
 
-    def _draw_solution(self, draw: ImageDraw.ImageDraw, path: Sequence[Cell]) -> None:
+    def _draw_solution(self, image: Image.Image, path: Sequence[Cell]) -> None:
         if len(path) < 2:
             return
         thickness = max(3, self.ring_width // 4)
         points = [self._cell_center(cell) for cell in path]
-        draw.line(points, fill=LINE_COLOR, width=thickness, joint="curve")
+        draw_path_line(image, points, LINE_COLOR, thickness)
+
+    def _draw_cell_ids(self, draw: ImageDraw.ImageDraw) -> None:
+        font_size = max(8, int(self.ring_width * 0.4))
+        try:
+            font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+        except OSError:
+            try:
+                font = ImageFont.truetype("arial.ttf", font_size)
+            except OSError:
+                font = ImageFont.load_default()
+
+        # Iterate all cells
+        for ring in range(self.total_rings):
+            count = self.cells_per_ring[ring]
+            for segment in range(count):
+                cell = (ring, segment)
+                text = str(self._get_cell_id(cell))
+                cx, cy = self._cell_center(cell)
+                draw.text((cx, cy), text, fill=TEXT_COLOR, anchor="mm", font=font)
 
     # ------------------------------------------------------------------
     # Geometry utilities
@@ -431,6 +467,8 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
 
     def _cell_center(self, cell: Cell) -> Tuple[float, float]:
         ring, idx = cell
+        if ring==0:
+            return self.center
         inner, outer = self._ring_bounds(ring)
         radius = self._radius_to_pixel((inner + outer) * 0.5)
         start_deg, end_deg = self._segment_angles_deg(ring, idx)
@@ -451,10 +489,15 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         parser.add_argument("--wall-thickness", type=int, default=None, help="Thickness of black walls in pixels")
         parser.add_argument("--size", type=int, default=None, help="Alias for --ring-width to align with shared base interface")
         parser.add_argument("--canvas-width", type=int, default=None, help="Final canvas width in pixels")
-        parser.add_argument("--aspect", type=float, default=None, help="Desired width/height ratio for the final canvas")
+        parser.add_argument("--aspect", type=float, default=None, help="Desired width/height ratio")
         parser.add_argument("--seed", type=int, default=None)
         parser.add_argument("--prompt", type=str, default=None)
-        return parser.parse_args(argv)
+        parser.add_argument("--show-cell-id", action="store_true", help="Draw cell IDs on the maze")
+        parser.add_argument("--use-gpt-5", action="store_true", help="Same as --show-cell-id")
+        namespace=parser.parse_args(argv)
+        if namespace.use_gpt_5:
+            namespace.show_cell_id = True
+        return namespace
 
     @classmethod
     def main(cls, argv: Optional[List[str]] = None) -> None:
@@ -471,6 +514,7 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
             prompt=prompt_arg,
             canvas_width=args.canvas_width,
             aspect=args.aspect,
+            show_cell_id=args.show_cell_id,
         )
         records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
         generator.write_metadata(records, generator.output_dir / "data.json")

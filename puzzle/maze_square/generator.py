@@ -7,9 +7,9 @@ from collections import deque
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
-from ..maze_base import MazePuzzleGenerator, MazePuzzleRecord
+from ..maze_base import MazePuzzleGenerator, MazePuzzleRecord, draw_path_line
 
 WALL = 1
 PATH = 0
@@ -20,6 +20,7 @@ START_COLOR = (220, 30, 30)
 GOAL_COLOR = START_COLOR #(40, 180, 80)
 LINE_COLOR = (220, 0, 0)
 BACKGROUND_COLOR = (0, 0, 0)
+TEXT_COLOR = (0, 0, 255)
 
 
 class MazeGenerator(MazePuzzleGenerator):
@@ -42,6 +43,7 @@ class MazeGenerator(MazePuzzleGenerator):
         aspect_ratio: Optional[float] = None,
         seed: Optional[int] = None,
         prompt: Optional[str] = None,
+        show_cell_id: bool = False,
     ) -> None:
         if rows < 5 or cols < 5:
             raise ValueError("rows and cols must be at least 5")
@@ -76,6 +78,7 @@ class MazeGenerator(MazePuzzleGenerator):
             size=effective_cell_size,
             seed=seed,
             prompt=prompt,
+            show_cell_id=show_cell_id,
         )
         self.rows = adjusted_rows
         self.cols = adjusted_cols
@@ -124,6 +127,7 @@ class MazeGenerator(MazePuzzleGenerator):
             "goal": list(goal),
             "cell_bboxes": cell_bboxes,
             "padding": [pad_left, pad_top, pad_right, pad_bottom],
+            "solution_path_cell_ids": [self._get_cell_id(*cell) for cell in path],
         }
         return self.build_record(
             puzzle_uuid,
@@ -183,6 +187,9 @@ class MazeGenerator(MazePuzzleGenerator):
             node = parents[node]
         result.reverse()
         return result
+
+    def _get_cell_id(self, r: int, c: int) -> int:
+        return r * self.cols + c
 
     def _compute_padding(self) -> Tuple[int, int, int, int, Tuple[int, int]]:
         return self._layout_for(self.rows, self.cols, self.cell_size, self.aspect_ratio)
@@ -269,25 +276,18 @@ class MazeGenerator(MazePuzzleGenerator):
                 )
                 for r, c in path
             ]
-            if len(points) >= 2:
-                draw.line(points, fill=LINE_COLOR, width=thickness, joint="curve")
-            elif points:
-                x, y = points[0]
-                draw.ellipse(
-                    (
-                        x - thickness // 2,
-                        y - thickness // 2,
-                        x + thickness // 2,
-                        y + thickness // 2,
-                    ),
-                    fill=LINE_COLOR,
-                )
+            draw_path_line(canvas, points, LINE_COLOR, thickness)
+
             # Reinforce start/goal colors on top of the line for clarity
             self._draw_cell(draw, start, pad_left, pad_top, START_COLOR)
             self._draw_cell(draw, goal, pad_left, pad_top, GOAL_COLOR)
             # Draw a thin red overlay within start/goal to keep the line visible
             self._draw_path_marker(draw, start, pad_left, pad_top, thickness - 2)
             self._draw_path_marker(draw, goal, pad_left, pad_top, thickness - 2)
+        
+        if self.show_cell_id:
+            self._draw_cell_ids(draw, pad_left, pad_top)
+
         return canvas
 
     def _draw_cell(
@@ -334,6 +334,23 @@ class MazeGenerator(MazePuzzleGenerator):
         y = pad_top + row * self.cell_size + self.cell_size / 2.0
         return (x, y)
 
+    def _draw_cell_ids(self, draw: ImageDraw.ImageDraw, pad_left: int, pad_top: int) -> None:
+        font_size = max(8, int(self.cell_size * 0.4))
+        try:
+            font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+        except OSError:
+            try:
+                font = ImageFont.truetype("arial.ttf", font_size)
+            except OSError:
+                font = ImageFont.load_default()
+
+        for r in range(self.rows):
+            for c in range(self.cols):
+                 text = str(self._get_cell_id(r, c))
+                 center_x = pad_left + c * self.cell_size + self.cell_size / 2.0
+                 center_y = pad_top + r * self.cell_size + self.cell_size / 2.0
+                 draw.text((center_x, center_y), text, fill=TEXT_COLOR, anchor="mm", font=font)
+
     @classmethod
     def _parse_args(cls, argv: Optional[List[str]] = None) -> argparse.Namespace:
         parser = argparse.ArgumentParser(description="Generate maze puzzles for VLM training")
@@ -347,7 +364,12 @@ class MazeGenerator(MazePuzzleGenerator):
         parser.add_argument("--size", type=int, default=None, help="Alias for --cell-size to match base interface")
         parser.add_argument("--prompt", type=str, default=None)
         parser.add_argument("--seed", type=int, default=None)
-        return parser.parse_args(argv)
+        parser.add_argument("--show-cell-id", action="store_true", help="Draw cell IDs on the maze")
+        parser.add_argument("--use-gpt-5", action="store_true", help="Same as --show-cell-id")
+        namespace=parser.parse_args(argv)
+        if namespace.use_gpt_5:
+            namespace.show_cell_id = True
+        return namespace
 
     @classmethod
     def main(cls, argv: Optional[List[str]] = None) -> None:
@@ -364,6 +386,7 @@ class MazeGenerator(MazePuzzleGenerator):
             cell_size=cell_size,
             seed=args.seed,
             prompt=prompt_arg,
+            show_cell_id=args.show_cell_id,
         )
         records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
         generator.write_metadata(records, generator.output_dir / "data.json")

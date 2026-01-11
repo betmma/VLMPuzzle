@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
+import re
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
@@ -18,10 +20,25 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from .base import AbstractPuzzleEvaluator, AbstractPuzzleGenerator, PathLike
 
+
+def draw_path_line(
+    image: Image.Image,
+    points: List[Tuple[float, float]],
+    color: Tuple[int, int, int],
+    thickness: int,
+) -> None:
+    """Draws a path (solution line) on the given image."""
+    draw = ImageDraw.Draw(image)
+    if len(points) >= 2:
+        draw.line(points, fill=color, width=thickness, joint="curve")
+    elif len(points) == 1:
+        x, y = points[0]
+        r = thickness / 2
+        draw.ellipse((x - r, y - r, x + r, y + r), fill=color)
 
 @dataclass
 class MazePuzzleRecord:
@@ -29,6 +46,7 @@ class MazePuzzleRecord:
 
     id: str
     prompt: str
+    gpt5_prompt: str
     canvas_dimensions: Tuple[int, int]
     start_point: Tuple[float, float]
     goal_point: Tuple[float, float]
@@ -40,6 +58,7 @@ class MazePuzzleRecord:
         payload: Dict[str, Any] = {
             "id": self.id,
             "prompt": self.prompt,
+            "gpt5_prompt": self.gpt5_prompt,
             "canvas_dimensions": [int(self.canvas_dimensions[0]), int(self.canvas_dimensions[1])],
             "start_point": [float(self.start_point[0]), float(self.start_point[1])],
             "goal_point": [float(self.goal_point[0]), float(self.goal_point[1])],
@@ -57,6 +76,7 @@ class MazePuzzleGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
 
     DEFAULT_OUTPUT_DIR: Optional[PathLike] = "data/maze"
     DEFAULT_PROMPT: Optional[str] = "Draw a red path connecting two red dots without touching the black walls. In portrait. Static camera."
+    DEFAULT_GPT5_PROMPT: Optional[str] = "Find a path connecting two red dots without touching the black walls in the maze. Movement is between adjacent hex cells through shared edges only (no diagonal corner moves). Each cell has its ID printed on it. Present your answer as a list of cell IDs. Example: [1, 4, 3, 2]. Must answer now without asking for clarifications."
 
     def __init__(
         self,
@@ -67,6 +87,7 @@ class MazePuzzleGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
         size: int = 32,
         seed: Optional[int] = None,
         prompt: Optional[str] = None,
+        show_cell_id: bool = False,
     ) -> None:
         resolved_output = output_dir if output_dir is not None else self.DEFAULT_OUTPUT_DIR
         if resolved_output is None:
@@ -90,6 +111,7 @@ class MazePuzzleGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
             raise ValueError("size must be positive")
         self.size = int(size)
         self.prompt = prompt if prompt is not None else (self.DEFAULT_PROMPT or "")
+        self.show_cell_id = show_cell_id
         self._rng = random.Random(seed)
 
         root = Path(self.output_dir)
@@ -141,6 +163,7 @@ class MazePuzzleGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
         return MazePuzzleRecord(
             id=record_id,
             prompt=record_prompt,
+            gpt5_prompt=self.DEFAULT_GPT5_PROMPT or record_prompt,
             canvas_dimensions=self.canvas_dimensions,
             start_point=start_point,
             goal_point=goal_point,
@@ -159,7 +182,12 @@ class MazePuzzleGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
         parser.add_argument("--size", type=int, default=32, help="Primary maze sizing parameter (e.g., cell size or radius)")
         parser.add_argument("--seed", type=int, default=None)
         parser.add_argument("--prompt", type=str, default=None)
-        return parser.parse_args(argv)
+        parser.add_argument("--show-cell-id", action="store_true", help="Draw cell IDs on the maze")
+        parser.add_argument("--use-gpt-5", action="store_true", help="Same as --show-cell-id")
+        namespace=parser.parse_args(argv)
+        if namespace.use_gpt_5:
+            namespace.show_cell_id = True
+        return namespace
 
     @classmethod
     def main(cls, argv: Optional[List[str]] = None) -> None:
@@ -173,6 +201,7 @@ class MazePuzzleGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
             size=args.size,
             seed=args.seed,
             prompt=prompt_arg,
+            show_cell_id=args.show_cell_id,
         )
         records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
         generator.write_metadata(records, generator.output_dir / "data.json")
@@ -215,6 +244,10 @@ class MazePuzzleEvaluator(AbstractPuzzleEvaluator):
     ) -> MazeEvaluationResult:
         record = self.get_record(puzzle_id)
         candidate_path = Path(candidate_image)
+        
+        if not candidate_path.exists():
+            self._attempt_reconstruction(record, candidate_path)
+
         if not candidate_path.exists():
             raise FileNotFoundError(f"Candidate image not found: {candidate_path}")
 
@@ -284,6 +317,166 @@ class MazePuzzleEvaluator(AbstractPuzzleEvaluator):
             connected=connected,
             message=message,
         )
+
+    def _attempt_reconstruction(
+        self,
+        record: Dict[str, Any],
+        candidate_path: Path,
+    ) -> None:
+        """Attempt to reconstruct a candidate solution image from a content.txt file containing a path of cell IDs."""
+        content_path = candidate_path.parent / "content.txt"
+        if not content_path.exists():
+            return
+
+        try:
+            content = content_path.read_text(encoding="utf-8")
+        except Exception:
+            return
+
+        # Find list pattern: [1, 2, 3]
+        matches = re.findall(r"\[([\d,\s]+)\]", content)
+        if not matches:
+            return
+        
+        # Use the last match found
+        raw_list = matches[-1]
+        try:
+            path_ids = [int(x.strip()) for x in raw_list.split(",") if x.strip()]
+        except ValueError:
+            return
+
+        if not path_ids:
+            return
+
+        # Prepare canvas
+        dims = record.get("canvas_dimensions")
+        if not dims or len(dims) < 2:
+             # Try to guess or fail
+             return
+        width, height = int(dims[0]), int(dims[1])
+        
+        # Create a white canvas - the evaluator mostly cares about red pixels
+        canvas = Image.new("RGB", (width, height), (255, 255, 255))
+        draw = ImageDraw.Draw(canvas)
+        
+        points = []
+        for pid in path_ids:
+            center = self._resolve_cell_center(record, pid)
+            if center:
+                points.append(center)
+        
+        if len(points) >= 2:
+            # Draw a thick red line
+            # Thickness can be estimated from cell size if available, or static
+            thickness = 5
+            if "cell_size" in record:
+                thickness = max(3, int(record["cell_size"]) // 3)
+            elif "cell_radius" in record:
+                thickness = max(3, int(record["cell_radius"]) // 3)
+            elif "ring_width" in record:
+                thickness = max(3, int(record["ring_width"]) // 3)
+            
+            draw_path_line(canvas, points, (255, 0, 0), thickness)
+            
+            # Save the reconstructed image
+            try:
+                canvas.save(candidate_path)
+            except Exception:
+                pass
+
+
+    def _resolve_cell_center(self, record: Dict[str, Any], cell_id: int) -> Optional[Tuple[float, float]]:
+        """Resolve the center coordinate of a cell given its ID and the puzzle record."""
+        # 1. Square Maze
+        if "rows" in record and "cols" in record:
+            rows = int(record["rows"])
+            cols = int(record["cols"])
+            if cell_id < 0 or cell_id >= rows * cols:
+                return None
+            
+            row = cell_id // cols
+            col = cell_id % cols
+            
+            if "cell_bboxes" in record:
+                bboxes = record["cell_bboxes"]
+                if row < len(bboxes) and col < len(bboxes[row]):
+                    bbox = bboxes[row][col]
+                    return ((bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0)
+            
+            # Fallback if cell_bboxes not present but padding/size is
+            if "cell_size" in record and "padding" in record:
+                cell_size = int(record["cell_size"])
+                pad_left = int(record["padding"][0])
+                pad_top = int(record["padding"][1])
+                x = pad_left + col * cell_size + cell_size / 2.0
+                y = pad_top + row * cell_size + cell_size / 2.0
+                return (x, y)
+
+        # 2. Hexagon Maze
+        elif "radius" in record and "cell_radius" in record:
+            radius = int(record["radius"])
+            cell_radius = int(record["cell_radius"])
+            dims = record.get("canvas_dimensions", [0, 0])
+            center_x = dims[0] / 2.0
+            center_y = dims[1] / 2.0
+            
+            # Reconstruct cell list to find (q, r) from index
+            # This must match the generator's order exactly
+            cells = []
+            for q in range(-radius, radius + 1):
+                for r in range(-radius, radius + 1):
+                    s = -q - r
+                    if max(abs(q), abs(r), abs(s)) <= radius:
+                        cells.append((q, r))
+            
+            if 0 <= cell_id < len(cells):
+                q, r = cells[cell_id]
+                # Hex to pixel
+                sqrt_three = math.sqrt(3.0)
+                x_rel = cell_radius * (1.5 * q)
+                y_rel = cell_radius * (sqrt_three * (r + q / 2.0))
+                return (center_x + x_rel, center_y + y_rel)
+
+        # 3. Labyrinth Maze
+        elif "total_rings" in record and "segments" in record:
+             total_rings = int(record["total_rings"])
+             segments = int(record["segments"])
+             ring_width = int(record.get("ring_width", 32))
+             wall_thickness = int(record.get("wall_thickness", 6))
+             
+             # Decode ID
+             if cell_id == 0:
+                 ring = 0
+                 segment = 0
+             else:
+                 # ID = 1 + (ring - 1) * segments + segment
+                 adjusted_id = cell_id - 1
+                 if adjusted_id < 0: return None
+                 ring = adjusted_id // segments + 1
+                 segment = adjusted_id % segments
+             
+             if ring >= total_rings:
+                 return None
+             
+             dims = record.get("canvas_dimensions", [0, 0])
+             cx, cy = dims[0] / 2.0, dims[1] / 2.0
+             
+             start_radius = ring * (ring_width + wall_thickness)
+             if ring == 0:
+                 # Center cell
+                 return (cx, cy)
+             else:
+                 # Calculate midpoint radius and angle
+                 mid_radius = start_radius + ring_width / 2.0
+                 angle_step = 360.0 / segments
+                 angle_deg = segment * angle_step + angle_step / 2.0
+                 angle_rad = math.radians(angle_deg)
+                 
+                 x = cx + mid_radius * math.cos(angle_rad)
+                 y = cy + mid_radius * math.sin(angle_rad)
+                 return (x, y)
+
+        return None
 
     def _red_mask(self, pixels: np.ndarray) -> np.ndarray:
         red = pixels[:, :, 0].astype(np.int32)
