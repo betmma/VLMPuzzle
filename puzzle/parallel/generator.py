@@ -31,7 +31,7 @@ class ParallelGenerator(PointTargetPuzzleGenerator):
         self.margin=80
         tries=0
         distance_threshold = self.canvas_short_side * 0.3
-        while tries<999:
+        while tries<9999:
             p0, p1, p2 = self.pick_target_point(0.7), self.pick_target_point(0.7), self.pick_target_point(0.7)
             distance=distanceToLine(p0, p1, p2)
             angle=math.atan2(p2.y - p1.y, p2.x - p1.x)
