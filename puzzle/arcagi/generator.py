@@ -148,18 +148,24 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
         *,
         task_path: Optional[PathLike] = None,
         puzzle_id: Optional[str] = None,
+        train_pairs: Optional[List[Dict[str, List[List[int]]]]] = None,
+        test_pair: Optional[Dict[str, List[List[int]]]] = None,
     ) -> ArcPuzzleRecord:
         task_file = self._resolve_task_path(task_path)
-        task_data = json.loads(task_file.read_text(encoding="utf-8"))
-        train_pairs = task_data.get("train") or []
-        if self.shot > 0:
-            train_pairs = train_pairs[:self.shot]
-        test_pairs = task_data.get("test") or []
-        if not test_pairs:
-            raise ValueError(f"Task {task_file} does not include any test pairs")
+        if train_pairs is None or test_pair is None:
+            task_data = json.loads(task_file.read_text(encoding="utf-8"))
+            if train_pairs is None:
+                train_pairs = task_data.get("train") or []
+                if self.shot > 0:
+                    train_pairs = train_pairs[:self.shot]
+            if test_pair is None:
+                test_pairs = task_data.get("test") or []
+                if not test_pairs:
+                    raise ValueError(f"Task {task_file} does not include any test pairs")
+                test_pair = test_pairs[0]
 
-        test_pair = test_pairs[0]
         layout, placements = self._build_layout(train_pairs, test_pair)
+
 
         record_id = puzzle_id or f"{task_file.stem}-{uuid.uuid4().hex[:8]}"
         puzzle_image = self._render_layout(layout, include_test_solution=False)
