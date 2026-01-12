@@ -47,6 +47,7 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         canvas_width: Optional[int] = None,
         aspect: Optional[float] = None,
         show_cell_id: bool = False,
+        video: bool = False,
     ) -> None:
         if rings < 2:
             raise ValueError("rings must be at least 2 to form an interesting maze")
@@ -86,6 +87,7 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
             seed=seed,
             prompt=prompt,
             show_cell_id=show_cell_id,
+            video=video,
         )
 
         self.canvas_size = self.canvas_width
@@ -155,6 +157,11 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         puzzle_image = self._render_maze(passages, start_cell, goal_cell, path=None)
         solution_image = self._render_maze(passages, start_cell, goal_cell, path=path_cells)
         puzzle_path, solution_path = self.save_images(puzzle_uuid, puzzle_image, solution_image)
+
+        if self.video:
+             path_points = [self._cell_center(cell) for cell in path_cells]
+             thickness = max(3, self.ring_width // 4)
+             self.save_video(puzzle_uuid, puzzle_image, path_points, thickness=thickness)
 
         start_point = self._cell_center(start_cell)
         goal_point = self._cell_center(goal_cell)
@@ -494,6 +501,7 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         parser.add_argument("--prompt", type=str, default=None)
         parser.add_argument("--show-cell-id", action="store_true", help="Draw cell IDs on the maze")
         parser.add_argument("--use-gpt-5", action="store_true", help="Same as --show-cell-id")
+        parser.add_argument("--video", action="store_true", help="Generate solution video")
         namespace=parser.parse_args(argv)
         if namespace.use_gpt_5:
             namespace.show_cell_id = True
@@ -515,6 +523,7 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
             canvas_width=args.canvas_width,
             aspect=args.aspect,
             show_cell_id=args.show_cell_id,
+            video=args.video,
         )
         records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
         generator.write_metadata(records, generator.output_dir / "data.json")

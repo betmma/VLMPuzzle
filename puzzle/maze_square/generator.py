@@ -44,6 +44,7 @@ class MazeGenerator(MazePuzzleGenerator):
         seed: Optional[int] = None,
         prompt: Optional[str] = None,
         show_cell_id: bool = False,
+        video: bool = False,
     ) -> None:
         if rows < 5 or cols < 5:
             raise ValueError("rows and cols must be at least 5")
@@ -79,6 +80,7 @@ class MazeGenerator(MazePuzzleGenerator):
             seed=seed,
             prompt=prompt,
             show_cell_id=show_cell_id,
+            video=video,
         )
         self.rows = adjusted_rows
         self.cols = adjusted_cols
@@ -116,6 +118,10 @@ class MazeGenerator(MazePuzzleGenerator):
         )
 
         puzzle_path, solution_path = self.save_images(puzzle_uuid, puzzle_image, solution_image)
+
+        if self.video:
+             path_points = [self._cell_center(cell, pad_left, pad_top) for cell in path]
+             self.save_video(puzzle_uuid, puzzle_image, path_points, thickness=max(3, self.cell_size // 3))
 
         start_point = self._cell_center(start, pad_left, pad_top)
         goal_point = self._cell_center(goal, pad_left, pad_top)
@@ -366,6 +372,7 @@ class MazeGenerator(MazePuzzleGenerator):
         parser.add_argument("--seed", type=int, default=None)
         parser.add_argument("--show-cell-id", action="store_true", help="Draw cell IDs on the maze")
         parser.add_argument("--use-gpt-5", action="store_true", help="Same as --show-cell-id")
+        parser.add_argument("--video", action="store_true", help="Generate solution video")
         namespace=parser.parse_args(argv)
         if namespace.use_gpt_5:
             namespace.show_cell_id = True
@@ -387,6 +394,7 @@ class MazeGenerator(MazePuzzleGenerator):
             seed=args.seed,
             prompt=prompt_arg,
             show_cell_id=args.show_cell_id,
+            video=args.video,
         )
         records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
         generator.write_metadata(records, generator.output_dir / "data.json")

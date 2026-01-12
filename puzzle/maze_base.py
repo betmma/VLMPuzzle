@@ -88,6 +88,7 @@ class MazePuzzleGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
         seed: Optional[int] = None,
         prompt: Optional[str] = None,
         show_cell_id: bool = False,
+        video: bool = False,
     ) -> None:
         resolved_output = output_dir if output_dir is not None else self.DEFAULT_OUTPUT_DIR
         if resolved_output is None:
@@ -112,6 +113,7 @@ class MazePuzzleGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
         self.size = int(size)
         self.prompt = prompt if prompt is not None else (self.DEFAULT_PROMPT or "")
         self.show_cell_id = show_cell_id
+        self.video = video
         self._rng = random.Random(seed)
 
         root = Path(self.output_dir)
@@ -146,6 +148,115 @@ class MazePuzzleGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
         puzzle_image.save(puzzle_path)
         solution_image.save(solution_path)
         return puzzle_path, solution_path
+
+    def save_video(
+        self,
+        record_id: str,
+        puzzle_image: Image.Image,
+        points: List[Tuple[float, float]],
+        thickness: int = 5,
+        color: Tuple[int, int, int] = (220, 0, 0),
+        fps: int = 30,
+        duration: float = 10.0,
+    ) -> Optional[Path]:
+        """Generates a solution video if video output is enabled."""
+        if not self.video:
+            return None
+        
+        try:
+            import cv2
+        except ImportError:
+            print("Warning: opencv-python not installed, skipping video generation")
+            return None
+
+        video_path = self.solution_dir / f"{record_id}_solution.mp4"
+        width, height = puzzle_image.size
+        
+        fourcc = cv2.VideoWriter_fourcc(*'vp09')
+        out = cv2.VideoWriter(str(video_path), fourcc, fps, (width, height))
+        
+        if not out.isOpened():
+            print(f"Warning: Could not open video writer for {video_path}")
+            return None
+
+        n_points = len(points)
+        if n_points < 2:
+            # Just write static frame
+            frame_np = np.array(puzzle_image)
+            frame_bgr = cv2.cvtColor(frame_np, cv2.COLOR_RGB2BGR)
+            for _ in range(fps):
+                out.write(frame_bgr)
+            out.release()
+            return video_path
+
+        # Determine reasonable duration, capped at 10s
+        eff_duration = min(duration, 10.0)
+        total_frames = int(fps * eff_duration)
+        
+        # Calculate segments and total length
+        segments = []
+        total_len = 0.0
+        for i in range(n_points - 1):
+            p1 = points[i]
+            p2 = points[i+1]
+            dist = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+            segments.append((dist, p1, p2))
+            total_len += dist
+
+        # Generate frames
+        for f in range(total_frames + 1):
+            progress = f / total_frames if total_frames > 0 else 1.0
+            cur_dist = total_len * progress
+            
+            # Find which segment and how far
+            temp_len = 0.0
+            path_subset = []
+            
+            for dist, p1, p2 in segments:
+                if temp_len + dist >= cur_dist:
+                    # Cut here
+                    remain = cur_dist - temp_len
+                    ratio = remain / dist if dist > 0 else 0
+                    tip_x = p1[0] + (p2[0] - p1[0]) * ratio
+                    tip_y = p1[1] + (p2[1] - p1[1]) * ratio
+                    current_tip = (tip_x, tip_y)
+                    path_subset.append(p1)
+                    path_subset.append(current_tip)
+                    break
+                else:
+                    path_subset.append(p1)
+                    temp_len += dist
+            else:
+                # Reached end (or rounding error), use full points
+                path_subset = list(points)
+            
+            # Draw frame
+            frame_img = puzzle_image.copy()
+            draw = ImageDraw.Draw(frame_img)
+            
+            if len(path_subset) > 1:
+                draw.line(path_subset, fill=color, width=thickness, joint="curve")
+                # Draw rounded caps
+                sx, sy = path_subset[0]
+                rr = thickness / 2
+                draw.ellipse((sx - rr, sy - rr, sx + rr, sy + rr), fill=color)
+                ex, ey = path_subset[-1]
+                draw.ellipse((ex - rr, ey - rr, ex + rr, ey + rr), fill=color)
+            elif len(path_subset) == 1:
+                sx, sy = path_subset[0]
+                rr = thickness / 2
+                draw.ellipse((sx - rr, sy - rr, sx + rr, sy + rr), fill=color)
+
+            frame_np = np.array(frame_img)
+            frame_bgr = cv2.cvtColor(frame_np, cv2.COLOR_RGB2BGR)
+            out.write(frame_bgr)
+            
+        # Hold end
+        for _ in range(int(fps * 1.0)):
+            out.write(frame_bgr)
+
+        out.release()
+        return video_path
 
     def build_record(
         self,
@@ -184,6 +295,7 @@ class MazePuzzleGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
         parser.add_argument("--prompt", type=str, default=None)
         parser.add_argument("--show-cell-id", action="store_true", help="Draw cell IDs on the maze")
         parser.add_argument("--use-gpt-5", action="store_true", help="Same as --show-cell-id")
+        parser.add_argument("--video", action="store_true", help="Generate solution video")
         namespace=parser.parse_args(argv)
         if namespace.use_gpt_5:
             namespace.show_cell_id = True
@@ -202,6 +314,7 @@ class MazePuzzleGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
             seed=args.seed,
             prompt=prompt_arg,
             show_cell_id=args.show_cell_id,
+            video=args.video,
         )
         records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
         generator.write_metadata(records, generator.output_dir / "data.json")

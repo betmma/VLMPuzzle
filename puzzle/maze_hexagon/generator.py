@@ -66,6 +66,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         canvas_width: Optional[int] = None,
         aspect: Optional[float] = None,
         show_cell_id: bool = False,
+        video: bool = False,
     ) -> None:
         if radius < 2:
             raise ValueError("radius must be at least 2")
@@ -121,6 +122,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
             seed=seed,
             prompt=prompt,
             show_cell_id=show_cell_id,
+            video=video,
         )
 
         self.canvas_width_px = final_width
@@ -187,6 +189,11 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
 
         record_id = puzzle_id or self.next_id()
         puzzle_path, solution_path = self.save_images(record_id, puzzle_image, solution_image)
+
+        if self.video:
+            path_points = [self._cell_center(cell) for cell in solution]
+            thickness = max(4, int(self.cell_radius * 0.35))
+            self.save_video(record_id, puzzle_image, path_points, thickness=thickness)
 
         start_point = self._cell_center(start_cell)
         goal_point = self._cell_center(goal_cell)
@@ -398,6 +405,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         parser.add_argument("--prompt", type=str, default=None)
         parser.add_argument("--show-cell-id", action="store_true", help="Draw cell IDs on the maze")
         parser.add_argument("--use-gpt-5", action="store_true", help="Same as --show-cell-id")
+        parser.add_argument("--video", action="store_true", help="Generate solution video")
         namespace=parser.parse_args(argv)
         if namespace.use_gpt_5:
             namespace.show_cell_id = True
@@ -420,6 +428,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
             canvas_width=args.canvas_width,
             aspect=args.aspect,
             show_cell_id=args.show_cell_id,
+            video=args.video,
         )
         records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
         generator.write_metadata(records, generator.output_dir / "data.json")
