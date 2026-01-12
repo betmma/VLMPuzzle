@@ -96,7 +96,7 @@ python -m puzzle.arcagi.evaluator data/arcagi/data.json <PUZZLE_ID> attempts/arc
 
 Key helpers:
 
-- `scripts/generate_all_arc_puzzles.py`: bulk generation across the curated task list used in VideoThinkBench.
+- `scripts/generate_all_arc_puzzles.py`: bulk generation using all jsons in ARC-AGI-2 dataset. use --video to generate video solutions besides image solutions. use --split *an integer* to generate more than ARC-AGI-2 dataset amount by combination over training instances.
 - `scripts/arcagi_range_vote.py`: aggregates self-consistency runs (supports GPT-5, Claude 4.5, Gemini 2.5 Pro, and Sora-2 outputs). The paper’s ablations rely on these ranges.
 
 Evaluation converts colored cells back to ARC palette indices and prints JSON with per-cell agreement, enabling downstream voting or qualitative review.
@@ -116,6 +116,7 @@ python -m puzzle.maze.evaluator data/maze/data.json <PUZZLE_ID> attempts/maze/fi
 
 Mazes highlight the start cell and the goal in red. The evaluator verifies that a continuous red stroke connects them without bleeding into walls. `scripts/maze_summary.py` collects aggregate accuracy from batches of attempts.
 
+Generators can use --video to generate video solutions, and --use-gpt-5 to print cell ids on the image, for VLMs to answer.
 
 ## Legacy generators not in the paper
 
