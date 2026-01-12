@@ -79,9 +79,11 @@ The evaluator reports the option inferred from:
 
 Most leaderboard scores quoted in the paper use majority voting over frames (“Major Frame”), last-frame inspection, or the audio transcript.
 
-Batch utilities in `scripts/gen_point.sh` and `scripts/multiple_choice_summary.py` automate multi-sample generation and summary for all point/line/shape tasks.
+`scripts/gen_point.sh` can generate training data for eyeballing puzzles. The "VIDEO" argument can be set to true to also generate ground truth videos.
 
 `scripts/run_point.sh` calls `scripts/generate_and_vote.py` that generates new puzzles for multiple puzzle types and then evaluate them.
+
+`scripts/multiple_choice_summary.py` outputs summary for all eyeballing puzzles.
 
 ## ARC-AGI-2 abstractions
 
