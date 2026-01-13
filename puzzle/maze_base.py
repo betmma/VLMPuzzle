@@ -157,7 +157,7 @@ class MazePuzzleGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
         thickness: int = 5,
         color: Tuple[int, int, int] = (220, 0, 0),
         fps: int = 30,
-        duration: float = 10.0,
+        duration: float = 6.4,
     ) -> Optional[Path]:
         """Generates a solution video if video output is enabled."""
         if not self.video:

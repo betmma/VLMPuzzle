@@ -71,6 +71,7 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
     CANDIDATE_OUTLINE_WIDTH: int = 4
     CANDIDATE_HIGHLIGHT_OUTLINE_WIDTH: int = 4
     CANDIDATE_LABEL_OFFSET_Y: int = 0
+    MAX_VIDEO_FRAMES: int = 193
     DEFAULT_OUTPUT_DIR: str = None
     DEFAULT_PROMPT: str = None
     DEFAULT_GPT5_PROMPT: str = None
@@ -408,18 +409,30 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
         width, height = self.canvas_dimensions
         fps = 30
         
+        base_hold = 10
+        end_hold = 30
+        step_frames = 30
+
+        estimated_frames = base_hold + len(solution_steps) * step_frames + end_hold
+        if estimated_frames > self.MAX_VIDEO_FRAMES:
+            available = self.MAX_VIDEO_FRAMES - base_hold - end_hold
+            if len(solution_steps) > 0:
+                step_frames = max(1, int(available / len(solution_steps)))
+            else:
+                step_frames = 1
+
         # We need a renderer that can paint these commands onto a cv2 frame
         video_renderer = VideoRenderer(width, height, self)
         
         # 1. Base Frame (Static)
         video_renderer.execute_commands(base_cmds)
         # Hold base frame for 1 second
-        for _ in range(30):
+        for _ in range(base_hold):
             video_renderer.write_frame()
             
         # 2. Animate Solution Steps
         for cmd in solution_steps:
-             video_renderer.animate_command(cmd, duration_frames=30)
+             video_renderer.animate_command(cmd, duration_frames=step_frames)
              
         # 3. Animate Answer (Candidates)
         if final_candidates_cmd:
@@ -427,7 +440,7 @@ class PointTargetPuzzleGenerator(AbstractPuzzleGenerator):
              # Better: Render the candidates command
              video_renderer.execute_commands([final_candidates_cmd])
              # Hold for result
-             for _ in range(30):
+             for _ in range(end_hold):
                  video_renderer.write_frame()
 
         video_renderer.save(video_path)

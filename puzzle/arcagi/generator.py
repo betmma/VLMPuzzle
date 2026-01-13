@@ -111,6 +111,8 @@ class ArcPuzzleRecord:
 class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
     """Generate ARC-AGI composite puzzles from task JSON files."""
 
+    MAX_VIDEO_FRAMES: int = 193
+
     def __init__(
         self,
         *,
@@ -540,10 +542,24 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
                 for c in range(cols):
                     cells_to_paint.append((r, c, test_output_grid[r][c]))
 
-        for r, c, val in cells_to_paint:
-            color_rgb = ARC_PALETTE.get(val, (0,0,0))
-            color_bgr = (color_rgb[2], color_rgb[1], color_rgb[0])
-            self._paint_cell_in_cv2(current_frame, x_start, y_start, r, c, color_bgr)
+        start_hold = 5
+        dominant_hold = 5 if has_dominant else 0
+        end_hold = 20
+        total_static_frames = start_hold + dominant_hold + end_hold
+        
+        painting_steps = len(cells_to_paint)
+        max_painting_frames = self.MAX_VIDEO_FRAMES - total_static_frames
+        
+        batch_size = 1
+        if painting_steps > max_painting_frames:
+             batch_size = math.ceil(painting_steps / max(1, max_painting_frames))
+
+        for i in range(0, len(cells_to_paint), batch_size):
+            batch = cells_to_paint[i : i + batch_size]
+            for r, c, val in batch:
+                color_rgb = ARC_PALETTE.get(val, (0,0,0))
+                color_bgr = (color_rgb[2], color_rgb[1], color_rgb[0])
+                self._paint_cell_in_cv2(current_frame, x_start, y_start, r, c, color_bgr)
             video.write(current_frame)
 
         for _ in range(20):

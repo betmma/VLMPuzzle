@@ -71,22 +71,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         if radius < 2:
             raise ValueError("radius must be at least 2")
 
-        resolved_cell_radius = int(
-            cell_radius if cell_radius is not None else (size if size is not None else self.DEFAULT_CELL_RADIUS)
-        )
-        if resolved_cell_radius < 12:
-            raise ValueError("cell_radius must be at least 12 pixels to preserve visible walls")
-
-        resolved_wall = int(wall_thickness if wall_thickness is not None else max(6, resolved_cell_radius // 6))
-        if resolved_wall <= 0:
-            raise ValueError("wall_thickness must be positive")
-
         self.radius = int(radius)
-        self.cell_radius = resolved_cell_radius
-        self.wall_thickness = resolved_wall
-        self.walk_radius = max(4.0, self.cell_radius - self.wall_thickness * 0.8)
-        self.outer_margin = self.cell_radius + self.wall_thickness * 3
-
         self.cells: List[Axial] = []
         for q in range(-self.radius, self.radius + 1):
             for r in range(-self.radius, self.radius + 1):
@@ -98,12 +83,63 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         self.cell_set: Set[Axial] = set(self.cells)
         self.cell_to_id: Dict[Axial, int] = {cell: i for i, cell in enumerate(self.cells)}
 
+        # Precompute unit grid spread for dimension calculations.
+        min_uq, max_uq, min_ur, max_ur = float("inf"), float("-inf"), float("inf"), float("-inf")
+        for q, r in self.cells:
+            ux = 1.5 * q
+            uy = SQRT_THREE * (r + q / 2.0)
+            min_uq = min(min_uq, ux)
+            max_uq = max(max_uq, ux)
+            min_ur = min(min_ur, uy)
+            max_ur = max(max_ur, uy)
+        spread_x = max_uq - min_uq
+        spread_y = max_ur - min_ur
+
+        target_cr = int(
+            cell_radius if cell_radius is not None else (size if size is not None else self.DEFAULT_CELL_RADIUS)
+        )
+        is_user_set = (cell_radius is not None) or (size is not None)
+
+        def _get_layout_size(cr: int) -> Tuple[int, int]:
+            wt = int(wall_thickness if wall_thickness is not None else max(6, cr // 6))
+            # Total width = (spread + 2)*cr + 2*(cr+wt)
+            w = int(math.ceil((spread_x + 2.0) * cr + 2.0 * wt))
+            h = int(math.ceil((spread_y + 2.0) * cr + 2.0 * wt))
+            return w, h
+
+        def _check_fits(cr: int) -> bool:
+            if canvas_width is None:
+                return True
+            bw, bh = _get_layout_size(cr)
+            w_limit = int(canvas_width)
+            if aspect is None:
+                return w_limit >= bw - 1
+            asp = float(aspect)
+            min_w_needed = max(bw, int(math.ceil(bh * asp)))
+            return w_limit >= min_w_needed - 1
+
+        if not is_user_set and canvas_width is not None and not _check_fits(target_cr):
+             for cr in range(target_cr - 1, 11, -1):
+                 if _check_fits(cr):
+                     target_cr = cr
+                     break
+
+        if target_cr < 12:
+            raise ValueError("cell_radius (or auto-sized) must be at least 12 pixels to preserve visible walls")
+
+        self.cell_radius = target_cr
+        self.wall_thickness = int(wall_thickness if wall_thickness is not None else max(6, self.cell_radius // 6))
+        
+        if self.wall_thickness <= 0:
+            raise ValueError("wall_thickness must be positive")
+
+        self.walk_radius = max(4.0, self.cell_radius - self.wall_thickness * 0.8)
+        self.outer_margin = self.cell_radius + self.wall_thickness * 3
+
         self._centers = {cell: self._axial_to_pixel(cell) for cell in self.cells}
-        min_x, min_y, max_x, max_y = self._bounds()
-        natural_width = max_x - min_x
-        natural_height = max_y - min_y
-        base_width = int(math.ceil(natural_width + self.outer_margin * 2))
-        base_height = int(math.ceil(natural_height + self.outer_margin * 2))
+        
+        # We rely on the precomputed formula matching strictly:
+        base_width, base_height = _get_layout_size(self.cell_radius)
 
         final_width, final_height = self._resolve_canvas_dimensions(
             base_width,
@@ -415,7 +451,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
     def main(cls, argv: Optional[List[str]] = None) -> None:
         args = cls._parse_args(argv)
         cell_radius = (
-            args.cell_radius if args.cell_radius is not None else (args.size if args.size is not None else cls.DEFAULT_CELL_RADIUS)
+            args.cell_radius if args.cell_radius is not None else args.size
         )
         prompt_arg = args.prompt if args.prompt is not None else cls.DEFAULT_PROMPT
         generator = cls(

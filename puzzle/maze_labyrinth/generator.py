@@ -54,26 +54,57 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         if segments < 6:
             raise ValueError("segments must be at least 6 for smooth angular resolution")
 
-        resolved_ring_width = int(ring_width if ring_width is not None else (size if size is not None else self.DEFAULT_RING_WIDTH))
-        if resolved_ring_width <= 6:
-            raise ValueError("ring_width must be greater than 6 pixels")
-
-        resolved_wall = int(wall_thickness if wall_thickness is not None else max(6, resolved_ring_width // 4))
-        if resolved_wall <= 0:
-            raise ValueError("wall_thickness must be positive")
-
         self.rings = int(rings)
         self.total_rings = self.rings + 1  # Include central cell as ring 0.
         self.segments = int(segments)
-        self.ring_width = resolved_ring_width
-        self.wall_thickness = resolved_wall
-        self.ring_spacing = self.ring_width + self.wall_thickness
-        self.inner_offset = max(24, self.wall_thickness * 2)
-        self.outer_margin = self.inner_offset
 
-        max_radius = (self.total_rings - 1) * self.ring_spacing + self.ring_width
-        canvas_radius = max_radius + self.inner_offset + self.outer_margin
-        canvas_size = int(math.ceil(canvas_radius * 2))
+        target_rw = int(ring_width if ring_width is not None else (size if size is not None else self.DEFAULT_RING_WIDTH))
+        is_user_set = (ring_width is not None) or (size is not None)
+
+        def _get_layout_params(rw: int) -> Tuple[int, int, int]:
+            wt = int(wall_thickness if wall_thickness is not None else max(6, rw // 4))
+            io = max(12, wt * 2, rw // 2)
+            # max_radius calculation: (rings-1)*spacing + ring_width
+            # spacing = rw + wt
+            mr = (self.total_rings - 1) * (rw + wt) + rw
+            # Canvas size covers diameter + 2*inner_offset (no outer margin)
+            sz = int(math.ceil((mr + io) * 2))
+            return wt, io, sz
+
+        def _check_fits(rw: int) -> bool:
+            if canvas_width is None:
+                return True
+            _, _, sz = _get_layout_params(rw)
+            w = int(canvas_width)
+            
+            if aspect is None:
+                return w >= sz
+                
+            asp = float(aspect)
+            if asp >= 1.0:
+                mw = int(math.ceil(sz * asp))
+            else:
+                mw = sz
+            return w >= mw - 1
+
+        if not is_user_set and canvas_width is not None and not _check_fits(target_rw):
+             for rw in range(target_rw - 1, 6, -1):
+                 if _check_fits(rw):
+                     target_rw = rw
+                     break
+
+        if target_rw <= 6:
+            raise ValueError("ring_width (or resulting auto-sized width) must be greater than 6 pixels")
+
+        self.ring_width = target_rw
+        self.wall_thickness, self.inner_offset, canvas_size = _get_layout_params(self.ring_width)
+
+        if self.wall_thickness <= 0:
+            raise ValueError("wall_thickness must be positive")
+        self.ring_spacing = self.ring_width + self.wall_thickness
+        
+        self.max_radius = (self.total_rings - 1) * self.ring_spacing + self.ring_width
+        self.canvas_radius = self.max_radius + self.inner_offset
 
         final_width, final_height = self._resolve_canvas_dimensions(canvas_size, canvas_width, aspect)
         final_aspect = final_width / final_height
@@ -92,8 +123,6 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
 
         self.canvas_size = self.canvas_width
         self.center = (self.canvas_width / 2.0, self.canvas_height / 2.0)
-        self.max_radius = max_radius
-        self.canvas_radius = canvas_radius
         self.cells_per_ring: List[int] = [1] + [self.segments for _ in range(self.rings)]
 
     # ------------------------------------------------------------------
@@ -128,16 +157,21 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
 
         if canvas_width is not None:
             width = int(canvas_width)
-            if width < min_width:
+            # FIXED: Added tolerance for floating point rounding errors (e.g. 640 vs 641)
+            # and allow the user to proceed if they are very close.
+            if width < min_width - 1:
                 raise ValueError(
-                    "canvas_width is too small to satisfy the requested aspect ratio without clipping the labyrinth"
+                    f"canvas_width ({width}) is too small to satisfy the requested aspect ratio "
+                    f"({aspect_value}) without clipping the labyrinth (needs ~{min_width})"
                 )
         else:
             width = min_width
 
         width = max(width, min_size)
         height = int(math.ceil(width / aspect_value))
-        if height < min_size:
+        
+        # FIXED: Allow slight tolerance for height checks too.
+        if height < min_size - 1:
             raise ValueError("Resolved canvas height is too small for the labyrinth geometry")
         return width, height
 
@@ -510,7 +544,7 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
     @classmethod
     def main(cls, argv: Optional[List[str]] = None) -> None:
         args = cls._parse_args(argv)
-        ring_width = args.ring_width if args.ring_width is not None else (args.size if args.size is not None else cls.DEFAULT_RING_WIDTH)
+        ring_width = args.ring_width if args.ring_width is not None else args.size
         prompt_arg = args.prompt if args.prompt is not None else cls.DEFAULT_PROMPT
         generator = cls(
             output_dir=args.output_dir,
