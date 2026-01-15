@@ -104,6 +104,12 @@ def _parse_args() -> argparse.Namespace:
         help="Optional aspect ratio for output images, e.g. 16:9 or 1.7778. Adds white padding on right/bottom to fit.",
     )
     parser.add_argument(
+        "--canvas-width",
+        type=int,
+        default=None,
+        help="Optional width to force resize the image to.",
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=None,
@@ -136,6 +142,7 @@ def main() -> None:
         prompt=args.prompt,
         seed=args.seed,
         aspect=args.aspect_ratio,
+        canvas_width=args.canvas_width,
     )
 
     metadata_path = args.metadata or (generator.output_dir / "data.json")

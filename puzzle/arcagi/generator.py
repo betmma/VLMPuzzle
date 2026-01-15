@@ -123,6 +123,7 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
         seed: Optional[int] = None,
         shot: int = 0,
         aspect: Optional[float] = None,
+        canvas_width: Optional[int] = None,
     ) -> None:
         super().__init__(output_dir)
         self.dataset_dir = Path(dataset_dir)
@@ -135,6 +136,7 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
         if aspect is not None and aspect <= 0:
             raise ValueError("aspect must be positive")
         self.aspect = aspect
+        self.canvas_width = canvas_width
 
         self.puzzle_dir = self.output_dir / "puzzles"
         self.solution_dir = self.output_dir / "solutions"
@@ -186,6 +188,15 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
                 puzzle_image = self._paste_onto_canvas(puzzle_image, target_width, target_height, offset_x, offset_y)
                 solution_image = self._paste_onto_canvas(solution_image, target_width, target_height, offset_x, offset_y)
                 placements = self._offset_placements(placements, offset_x, offset_y)
+
+        if self.canvas_width is not None and puzzle_image.width != self.canvas_width:
+            w, h = puzzle_image.size
+            scale = self.canvas_width / w
+            new_w = self.canvas_width
+            new_h = int(h * scale)
+            puzzle_image = puzzle_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            solution_image = solution_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            placements = self._scale_placements(placements, scale)
 
         puzzle_path = self.puzzle_dir / f"{record_id}_puzzle.png"
         solution_path = self.solution_dir / f"{record_id}_solution.png"
@@ -458,6 +469,29 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
                 GridPlacement(
                     kind=placement.kind,
                     bbox=(x0 + dx, y0 + dy, x1 + dx, y1 + dy),
+                    rows=placement.rows,
+                    cols=placement.cols,
+                )
+            )
+        return adjusted
+
+    def _scale_placements(
+        self,
+        placements: Sequence[GridPlacement],
+        scale: float,
+    ) -> List[GridPlacement]:
+        adjusted: List[GridPlacement] = []
+        for placement in placements:
+            x0, y0, x1, y1 = placement.bbox
+            adjusted.append(
+                GridPlacement(
+                    kind=placement.kind,
+                    bbox=(
+                        int(x0 * scale),
+                        int(y0 * scale),
+                        int(x1 * scale),
+                        int(y1 * scale),
+                    ),
                     rows=placement.rows,
                     cols=placement.cols,
                 )
