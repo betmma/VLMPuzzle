@@ -120,11 +120,11 @@ class MazeGenerator(MazePuzzleGenerator):
         puzzle_path, solution_path = self.save_images(puzzle_uuid, puzzle_image, solution_image)
 
         if self.video:
-             path_points = [self._cell_center(cell, pad_left, pad_top) for cell in path]
-             self.save_video(puzzle_uuid, puzzle_image, path_points, thickness=max(3, self.cell_size // 3))
+            path_points = [self._cell_center(self._get_cell_id(*cell)) for cell in path]
+            self.save_video(puzzle_uuid, puzzle_image, path_points, thickness=max(3, self.cell_size // 3))
 
-        start_point = self._cell_center(start, pad_left, pad_top)
-        goal_point = self._cell_center(goal, pad_left, pad_top)
+        start_point = self._cell_center(self._get_cell_id(*start))
+        goal_point = self._cell_center(self._get_cell_id(*goal))
         extra_payload: Dict[str, object] = {
             "grid_size": [self.rows, self.cols],
             "cell_size": self.cell_size,
@@ -334,8 +334,10 @@ class MazeGenerator(MazePuzzleGenerator):
             fill=LINE_COLOR,
         )
 
-    def _cell_center(self, cell: Tuple[int, int], pad_left: int, pad_top: int) -> Tuple[float, float]:
-        row, col = cell
+    def _cell_center(self, cell_id: int) -> Tuple[float, float]:
+        row = cell_id // self.cols
+        col = cell_id % self.cols
+        pad_left, pad_top, _, _, _ = self._compute_padding()
         x = pad_left + col * self.cell_size + self.cell_size / 2.0
         y = pad_top + row * self.cell_size + self.cell_size / 2.0
         return (x, y)

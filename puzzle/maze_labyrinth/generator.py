@@ -193,12 +193,12 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         puzzle_path, solution_path = self.save_images(puzzle_uuid, puzzle_image, solution_image)
 
         if self.video:
-             path_points = [self._cell_center(cell) for cell in path_cells]
-             thickness = max(3, self.ring_width // 4)
-             self.save_video(puzzle_uuid, puzzle_image, path_points, thickness=thickness)
+            path_points = [self._cell_center_from_cell(cell) for cell in path_cells]
+            thickness = max(3, self.ring_width // 4)
+            self.save_video(puzzle_uuid, puzzle_image, path_points, thickness=thickness)
 
-        start_point = self._cell_center(start_cell)
-        goal_point = self._cell_center(goal_cell)
+        start_point = self._cell_center_from_cell(start_cell)
+        goal_point = self._cell_center_from_cell(goal_cell)
 
         record = self.build_record(
             puzzle_uuid,
@@ -421,8 +421,8 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         draw.line([start, end], fill=PATH_COLOR, width=int(self.wall_thickness * 1.5))
 
     def _draw_markers(self, draw: ImageDraw.ImageDraw, start_cell: Cell, goal_cell: Cell) -> None:
-        start_point = self._cell_center(start_cell)
-        goal_point = self._cell_center(goal_cell)
+        start_point = self._cell_center_from_cell(start_cell)
+        goal_point = self._cell_center_from_cell(goal_cell)
         radius = max(6, self.ring_width // 3)
         self._draw_marker(draw, start_point, START_COLOR, radius)
         self._draw_marker(draw, goal_point, GOAL_COLOR, radius)
@@ -442,7 +442,7 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         if len(path) < 2:
             return
         thickness = max(3, self.ring_width // 4)
-        points = [self._cell_center(cell) for cell in path]
+        points = [self._cell_center_from_cell(cell) for cell in path]
         draw_path_line(image, points, LINE_COLOR, thickness)
 
     def _draw_cell_ids(self, draw: ImageDraw.ImageDraw) -> None:
@@ -461,7 +461,7 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
             for segment in range(count):
                 cell = (ring, segment)
                 text = str(self._get_cell_id(cell))
-                cx, cy = self._cell_center(cell)
+                cx, cy = self._cell_center_from_cell(cell)
                 draw.text((cx, cy), text, fill=TEXT_COLOR, anchor="mm", font=font)
 
     # ------------------------------------------------------------------
@@ -506,9 +506,19 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         y = cy - radius * math.sin(angle_rad)
         return (x, y)
 
-    def _cell_center(self, cell: Cell) -> Tuple[float, float]:
+    def _cell_center(self, cell_id: int) -> Tuple[float, float]:
+        if cell_id == 0:
+            cell = (0, 0)
+        else:
+            adjusted = cell_id - 1
+            ring = adjusted // self.segments + 1
+            segment = adjusted % self.segments
+            cell = (ring, segment)
+        return self._cell_center_from_cell(cell)
+
+    def _cell_center_from_cell(self, cell: Cell) -> Tuple[float, float]:
         ring, idx = cell
-        if ring==0:
+        if ring == 0:
             return self.center
         inner, outer = self._ring_bounds(ring)
         radius = self._radius_to_pixel((inner + outer) * 0.5)

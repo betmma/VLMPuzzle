@@ -227,12 +227,12 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         puzzle_path, solution_path = self.save_images(record_id, puzzle_image, solution_image)
 
         if self.video:
-            path_points = [self._cell_center(cell) for cell in solution]
+            path_points = [self._cell_center_from_cell(cell) for cell in solution]
             thickness = max(4, int(self.cell_radius * 0.35))
             self.save_video(record_id, puzzle_image, path_points, thickness=thickness)
 
-        start_point = self._cell_center(start_cell)
-        goal_point = self._cell_center(goal_cell)
+        start_point = self._cell_center_from_cell(start_cell)
+        goal_point = self._cell_center_from_cell(goal_cell)
 
         return self.build_record(
             record_id,
@@ -319,7 +319,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         draw = ImageDraw.Draw(canvas)
 
         for cell in self.cells:
-            center = self._cell_center(cell)
+            center = self._cell_center_from_cell(cell)
             corners = self._hex_corners(center, self.walk_radius*1.5)
             draw.polygon(corners, fill=PATH_COLOR)
 
@@ -342,7 +342,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         cell: Axial,
         passages: Dict[Axial, Set[Axial]],
     ) -> None:
-        center = self._cell_center(cell)
+        center = self._cell_center_from_cell(cell)
         outer_corners = self._hex_corners(center, self.cell_radius)
         for direction_index, delta in enumerate(DIRECTIONS):
             neighbor = (cell[0] + delta[0], cell[1] + delta[1])
@@ -356,7 +356,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
             draw.line([a, b], fill=WALL_COLOR, width=self.wall_thickness)
 
     def _draw_marker(self, draw: ImageDraw.ImageDraw, cell: Axial, color: Tuple[int, int, int]) -> None:
-        x, y = self._cell_center(cell)
+        x, y = self._cell_center_from_cell(cell)
         radius = max(6, int(self.cell_radius * 0.45))
         bbox = (x - radius, y - radius, x + radius, y + radius)
         draw.ellipse(bbox, fill=color)
@@ -364,7 +364,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
     def _draw_solution(self, image: Image.Image, path: Sequence[Axial]) -> None:
         if len(path) < 2:
             return
-        points = [self._cell_center(cell) for cell in path]
+        points = [self._cell_center_from_cell(cell) for cell in path]
         thickness = max(4, int(self.cell_radius * 0.35))
         draw_path_line(image, points, LINE_COLOR, thickness)
 
@@ -380,7 +380,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
 
         for cell in self.cells:
             text = str(self.cell_to_id[cell])
-            cx, cy = self._cell_center(cell)
+            cx, cy = self._cell_center_from_cell(cell)
             draw.text((cx, cy), text, fill=TEXT_COLOR, anchor="mm", font=font)
 
     # ------------------------------------------------------------------
@@ -392,7 +392,11 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         y = self.cell_radius * (SQRT_THREE * (r + q / 2.0))
         return x, y
 
-    def _cell_center(self, cell: Axial) -> Tuple[float, float]:
+    def _cell_center(self, cell_id: int) -> Tuple[float, float]:
+        cell = self.cells[cell_id]
+        return self._cell_center_from_cell(cell)
+
+    def _cell_center_from_cell(self, cell: Axial) -> Tuple[float, float]:
         rel_x, rel_y = self._centers[cell]
         return (self.center[0] + rel_x, self.center[1] + rel_y)
 
