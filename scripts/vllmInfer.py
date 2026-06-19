@@ -328,7 +328,7 @@ def generate_one(
     *,
     attempt: int,
 ) -> Path:
-    prompt_value = record.get("prompt")
+    prompt_value = record.get('gpt5_prompt') or record.get("prompt")
     if not isinstance(prompt_value, str) or not prompt_value.strip():
         raise ValueError(f"Record {record.get('id')!r} missing prompt")
     prompt_text = prompt_value.strip()
