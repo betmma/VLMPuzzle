@@ -105,13 +105,13 @@ Evaluation converts colored cells back to ARC palette indices and prints JSON wi
 
 Maze benchmarks test dynamic path drawing. Three generators ship in this repo:
 
-- `puzzle.maze.generator`: rectangular grids.
+- `puzzle.maze_square.generator`: rectangular grids.
 - `puzzle.maze_hexagon.generator`: hex-tiling mazes.
 - `puzzle.maze_labyrinth.generator`: labyrinth variants with preset motifs.
 
 ```bash
-python -m puzzle.maze.generator 20 --output-dir data/maze --rows 21 --cols 21 --cell-size 32
-python -m puzzle.maze.evaluator data/maze/data.json <PUZZLE_ID> attempts/maze/final.png
+python -m puzzle.maze_square.generator 20 --output-dir data/maze --rows 21 --cols 21 --cell-size 32
+python -m puzzle.maze_square.evaluator data/maze/data.json <PUZZLE_ID> attempts/maze/final.png
 ```
 
 Mazes highlight the start cell and the goal in red. The evaluator verifies that a continuous red stroke connects them without bleeding into walls. `scripts/maze_summary.py` collects aggregate accuracy from batches of attempts.
