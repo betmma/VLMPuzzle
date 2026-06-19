@@ -77,7 +77,7 @@ class MazePuzzleGenerator(AbstractPuzzleGenerator[MazePuzzleRecord]):
 
     DEFAULT_OUTPUT_DIR: Optional[PathLike] = "data/maze"
     DEFAULT_PROMPT: Optional[str] = "Draw a red path connecting two red dots without touching the black walls. In portrait. Static camera."
-    DEFAULT_GPT5_PROMPT: Optional[str] = "Find a path connecting two red dots without touching the black walls in the maze. Movement is between adjacent hex cells through shared edges only (no diagonal corner moves). Each cell has its ID printed on it. Present your answer as a list of cell IDs. Example: [1, 4, 3, 2]. Must answer now without asking for clarifications."
+    DEFAULT_GPT5_PROMPT: Optional[str] = "Find a path connecting two red dots without touching the black walls in the maze. Movement is between adjacent cells through shared edges only (no diagonal corner moves). Each cell has its ID printed on it. Present your answer as a list of cell IDs. Example: [1, 4, 3, 2]. Must answer now without asking for clarifications."
 
     def __init__(
         self,
