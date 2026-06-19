@@ -31,6 +31,13 @@ PUZZLES=(
 NUM_PUZZLES=50
 GEN_OPTS="--canvas-width=480 --aspect=0.55"
 OUTPUT_DIR="dataset/"
+VIDEO=true  # <--- Change this to true or false
+
+# Prepare the video flag based on the setting above
+VIDEO_FLAG=""
+if [ "$VIDEO" = "true" ]; then
+    VIDEO_FLAG="--video"
+fi
 
 # Loop through the array and execute the command for each puzzle name
 for PUZZLE_NAME in "${PUZZLES[@]}"; do
@@ -39,10 +46,7 @@ for PUZZLE_NAME in "${PUZZLES[@]}"; do
     echo "----------------------------------------------------"
     
     # Construct and run the command
-    # The `set -x` command would print the command before executing it, which can be useful for debugging
-    # set -x
-    python -m puzzle.$PUZZLE_NAME.generator "$NUM_PUZZLES" $GEN_OPTS --output-dir "$OUTPUT_DIR/$PUZZLE_NAME"
-    # set +x
+    python -m puzzle.$PUZZLE_NAME.generator "$NUM_PUZZLES" $GEN_OPTS --output-dir "$OUTPUT_DIR/$PUZZLE_NAME" $VIDEO_FLAG
     
     # Check the exit code of the last command
     if [ $? -ne 0 ]; then

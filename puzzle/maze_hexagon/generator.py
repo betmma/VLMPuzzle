@@ -8,9 +8,9 @@ from collections import deque
 from pathlib import Path
 from typing import Deque, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
-from ..maze_base import MazePuzzleGenerator, MazePuzzleRecord
+from ..maze_base import MazePuzzleGenerator, MazePuzzleRecord, draw_path_line
 
 # Rendering palette
 PATH_COLOR = (240, 240, 240)
@@ -19,6 +19,7 @@ START_COLOR = (220, 30, 30)
 GOAL_COLOR = START_COLOR
 LINE_COLOR = (220, 0, 0)
 BACKGROUND_COLOR = (16, 16, 16)
+TEXT_COLOR = (0, 0, 255)
 
 Axial = Tuple[int, int]
 
@@ -64,26 +65,13 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         prompt: Optional[str] = None,
         canvas_width: Optional[int] = None,
         aspect: Optional[float] = None,
+        show_cell_id: bool = False,
+        video: bool = False,
     ) -> None:
         if radius < 2:
             raise ValueError("radius must be at least 2")
 
-        resolved_cell_radius = int(
-            cell_radius if cell_radius is not None else (size if size is not None else self.DEFAULT_CELL_RADIUS)
-        )
-        if resolved_cell_radius < 12:
-            raise ValueError("cell_radius must be at least 12 pixels to preserve visible walls")
-
-        resolved_wall = int(wall_thickness if wall_thickness is not None else max(6, resolved_cell_radius // 6))
-        if resolved_wall <= 0:
-            raise ValueError("wall_thickness must be positive")
-
         self.radius = int(radius)
-        self.cell_radius = resolved_cell_radius
-        self.wall_thickness = resolved_wall
-        self.walk_radius = max(4.0, self.cell_radius - self.wall_thickness * 0.8)
-        self.outer_margin = self.cell_radius + self.wall_thickness * 3
-
         self.cells: List[Axial] = []
         for q in range(-self.radius, self.radius + 1):
             for r in range(-self.radius, self.radius + 1):
@@ -93,13 +81,65 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         if not self.cells:
             raise ValueError("No cells generated for the requested radius")
         self.cell_set: Set[Axial] = set(self.cells)
+        self.cell_to_id: Dict[Axial, int] = {cell: i for i, cell in enumerate(self.cells)}
+
+        # Precompute unit grid spread for dimension calculations.
+        min_uq, max_uq, min_ur, max_ur = float("inf"), float("-inf"), float("inf"), float("-inf")
+        for q, r in self.cells:
+            ux = 1.5 * q
+            uy = SQRT_THREE * (r + q / 2.0)
+            min_uq = min(min_uq, ux)
+            max_uq = max(max_uq, ux)
+            min_ur = min(min_ur, uy)
+            max_ur = max(max_ur, uy)
+        spread_x = max_uq - min_uq
+        spread_y = max_ur - min_ur
+
+        target_cr = int(
+            cell_radius if cell_radius is not None else (size if size is not None else self.DEFAULT_CELL_RADIUS)
+        )
+        is_user_set = (cell_radius is not None) or (size is not None)
+
+        def _get_layout_size(cr: int) -> Tuple[int, int]:
+            wt = int(wall_thickness if wall_thickness is not None else max(6, cr // 6))
+            # Total width = (spread + 2)*cr + 2*(cr+wt)
+            w = int(math.ceil((spread_x + 2.0) * cr + 2.0 * wt))
+            h = int(math.ceil((spread_y + 2.0) * cr + 2.0 * wt))
+            return w, h
+
+        def _check_fits(cr: int) -> bool:
+            if canvas_width is None:
+                return True
+            bw, bh = _get_layout_size(cr)
+            w_limit = int(canvas_width)
+            if aspect is None:
+                return w_limit >= bw - 1
+            asp = float(aspect)
+            min_w_needed = max(bw, int(math.ceil(bh * asp)))
+            return w_limit >= min_w_needed - 1
+
+        if not is_user_set and canvas_width is not None and not _check_fits(target_cr):
+             for cr in range(target_cr - 1, 11, -1):
+                 if _check_fits(cr):
+                     target_cr = cr
+                     break
+
+        if target_cr < 12:
+            raise ValueError("cell_radius (or auto-sized) must be at least 12 pixels to preserve visible walls")
+
+        self.cell_radius = target_cr
+        self.wall_thickness = int(wall_thickness if wall_thickness is not None else max(6, self.cell_radius // 6))
+        
+        if self.wall_thickness <= 0:
+            raise ValueError("wall_thickness must be positive")
+
+        self.walk_radius = max(4.0, self.cell_radius - self.wall_thickness * 0.8)
+        self.outer_margin = self.cell_radius + self.wall_thickness * 3
 
         self._centers = {cell: self._axial_to_pixel(cell) for cell in self.cells}
-        min_x, min_y, max_x, max_y = self._bounds()
-        natural_width = max_x - min_x
-        natural_height = max_y - min_y
-        base_width = int(math.ceil(natural_width + self.outer_margin * 2))
-        base_height = int(math.ceil(natural_height + self.outer_margin * 2))
+        
+        # We rely on the precomputed formula matching strictly:
+        base_width, base_height = _get_layout_size(self.cell_radius)
 
         final_width, final_height = self._resolve_canvas_dimensions(
             base_width,
@@ -117,6 +157,8 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
             size=self.cell_radius,
             seed=seed,
             prompt=prompt,
+            show_cell_id=show_cell_id,
+            video=video,
         )
 
         self.canvas_width_px = final_width
@@ -184,8 +226,13 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         record_id = puzzle_id or self.next_id()
         puzzle_path, solution_path = self.save_images(record_id, puzzle_image, solution_image)
 
-        start_point = self._cell_center(start_cell)
-        goal_point = self._cell_center(goal_cell)
+        if self.video:
+            path_points = [self._cell_center_from_cell(cell) for cell in solution]
+            thickness = max(4, int(self.cell_radius * 0.35))
+            self.save_video(record_id, puzzle_image, path_points, thickness=thickness)
+
+        start_point = self._cell_center_from_cell(start_cell)
+        goal_point = self._cell_center_from_cell(goal_cell)
 
         return self.build_record(
             record_id,
@@ -200,6 +247,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
                 "wall_thickness": self.wall_thickness,
                 "start_cell": list(start_cell),
                 "goal_cell": list(goal_cell),
+                "solution_path_cell_ids": [self.cell_to_id[cell] for cell in solution],
             },
         )
 
@@ -271,7 +319,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         draw = ImageDraw.Draw(canvas)
 
         for cell in self.cells:
-            center = self._cell_center(cell)
+            center = self._cell_center_from_cell(cell)
             corners = self._hex_corners(center, self.walk_radius*1.5)
             draw.polygon(corners, fill=PATH_COLOR)
 
@@ -281,7 +329,11 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         self._draw_marker(draw, start_cell, START_COLOR)
         self._draw_marker(draw, goal_cell, GOAL_COLOR)
         if path:
-            self._draw_solution(draw, path)
+            self._draw_solution(canvas, path)
+
+        if self.show_cell_id:
+            self._draw_cell_ids(draw)
+
         return canvas
 
     def _draw_cell_walls(
@@ -290,7 +342,7 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         cell: Axial,
         passages: Dict[Axial, Set[Axial]],
     ) -> None:
-        center = self._cell_center(cell)
+        center = self._cell_center_from_cell(cell)
         outer_corners = self._hex_corners(center, self.cell_radius)
         for direction_index, delta in enumerate(DIRECTIONS):
             neighbor = (cell[0] + delta[0], cell[1] + delta[1])
@@ -304,17 +356,32 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
             draw.line([a, b], fill=WALL_COLOR, width=self.wall_thickness)
 
     def _draw_marker(self, draw: ImageDraw.ImageDraw, cell: Axial, color: Tuple[int, int, int]) -> None:
-        x, y = self._cell_center(cell)
+        x, y = self._cell_center_from_cell(cell)
         radius = max(6, int(self.cell_radius * 0.45))
         bbox = (x - radius, y - radius, x + radius, y + radius)
         draw.ellipse(bbox, fill=color)
 
-    def _draw_solution(self, draw: ImageDraw.ImageDraw, path: Sequence[Axial]) -> None:
+    def _draw_solution(self, image: Image.Image, path: Sequence[Axial]) -> None:
         if len(path) < 2:
             return
-        points = [self._cell_center(cell) for cell in path]
+        points = [self._cell_center_from_cell(cell) for cell in path]
         thickness = max(4, int(self.cell_radius * 0.35))
-        draw.line(points, fill=LINE_COLOR, width=thickness, joint="curve")
+        draw_path_line(image, points, LINE_COLOR, thickness)
+
+    def _draw_cell_ids(self, draw: ImageDraw.ImageDraw) -> None:
+        font_size = max(8, int(self.cell_radius * 0.4))
+        try:
+            font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+        except OSError:
+            try:
+                font = ImageFont.truetype("arial.ttf", font_size)
+            except OSError:
+                font = ImageFont.load_default()
+
+        for cell in self.cells:
+            text = str(self.cell_to_id[cell])
+            cx, cy = self._cell_center_from_cell(cell)
+            draw.text((cx, cy), text, fill=TEXT_COLOR, anchor="mm", font=font)
 
     # ------------------------------------------------------------------
     # Geometry helpers
@@ -325,7 +392,11 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         y = self.cell_radius * (SQRT_THREE * (r + q / 2.0))
         return x, y
 
-    def _cell_center(self, cell: Axial) -> Tuple[float, float]:
+    def _cell_center(self, cell_id: int) -> Tuple[float, float]:
+        cell = self.cells[cell_id]
+        return self._cell_center_from_cell(cell)
+
+    def _cell_center_from_cell(self, cell: Axial) -> Tuple[float, float]:
         rel_x, rel_y = self._centers[cell]
         return (self.center[0] + rel_x, self.center[1] + rel_y)
 
@@ -372,13 +443,19 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
         parser.add_argument("--aspect", type=float, default=None, help="Desired width/height ratio for final canvas")
         parser.add_argument("--seed", type=int, default=None)
         parser.add_argument("--prompt", type=str, default=None)
-        return parser.parse_args(argv)
+        parser.add_argument("--show-cell-id", action="store_true", help="Draw cell IDs on the maze")
+        parser.add_argument("--use-gpt-5", action="store_true", help="Same as --show-cell-id")
+        parser.add_argument("--video", action="store_true", help="Generate solution video")
+        namespace=parser.parse_args(argv)
+        if namespace.use_gpt_5:
+            namespace.show_cell_id = True
+        return namespace
 
     @classmethod
     def main(cls, argv: Optional[List[str]] = None) -> None:
         args = cls._parse_args(argv)
         cell_radius = (
-            args.cell_radius if args.cell_radius is not None else (args.size if args.size is not None else cls.DEFAULT_CELL_RADIUS)
+            args.cell_radius if args.cell_radius is not None else args.size
         )
         prompt_arg = args.prompt if args.prompt is not None else cls.DEFAULT_PROMPT
         generator = cls(
@@ -390,6 +467,8 @@ class MazeHexagonGenerator(MazePuzzleGenerator):
             prompt=prompt_arg,
             canvas_width=args.canvas_width,
             aspect=args.aspect,
+            show_cell_id=args.show_cell_id,
+            video=args.video,
         )
         records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
         generator.write_metadata(records, generator.output_dir / "data.json")

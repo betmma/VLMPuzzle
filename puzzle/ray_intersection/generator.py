@@ -83,16 +83,16 @@ class RayIntersectionGenerator(PointTargetPuzzleGenerator):
         point_radius = self.point_radius
         self.place_candidates(intersection)
         intersection=intersection.to_list()
+        
+        # Store for _render usage
+        self._intersection_coords = intersection
+        self._rays = rays
 
         pid = puzzle_id or str(uuid.uuid4())
         puzzle_img = self._render(
-            intersection=intersection,
-            rays=rays,
             highlight_label=None,
         )
         solution_img = self._render(
-            intersection=intersection,
-            rays=rays,
             highlight_label=self.correct_label,
         )
 
@@ -100,6 +100,12 @@ class RayIntersectionGenerator(PointTargetPuzzleGenerator):
         solution_path = self.solution_dir / f"{pid}_solution.png"
         puzzle_img.save(puzzle_path)
         solution_img.save(solution_path)
+
+        if self.record_video:
+            try:
+                self.save_video_solution(pid)
+            except Exception as e:
+                pass
 
         return RayIntersectionPuzzleRecord(
             id=pid,
@@ -204,29 +210,36 @@ class RayIntersectionGenerator(PointTargetPuzzleGenerator):
     def _render(
         self,
         *,
-        intersection: Tuple[float, float],
-        rays: Sequence[RaySegment],
         highlight_label: Optional[str],
+        # Legacy/Testing optional args
+        intersection: Optional[Tuple[float, float]] = None,
+        rays: Optional[Sequence[RaySegment]] = None,
     ) -> Image.Image:
         width, height = self.canvas_dimensions
-        base = Image.new("RGB", (width, height), (255, 255, 255))
-        draw = ImageDraw.Draw(base)
+        draw, base = self.get_draw_base()
+
+        # Resolve args or state
+        intersection_val = intersection if intersection is not None else getattr(self, "_intersection_coords", None)
+        rays_val = rays if rays is not None else getattr(self, "_rays", None)
+        
+        if intersection_val is None or rays_val is None:
+             raise RuntimeError("Render called without geometry state")
 
         stroke_color = (40, 40, 40)
         stroke_width = max(3, int(round(min(width, height) * 0.015)))
 
         if highlight_label:
-            for ray in rays:
+            for ray in rays_val:
                 draw.line(
                     [
                         (int(round(ray.start[0])), int(round(ray.start[1]))),
-                        (int(round(intersection[0])), int(round(intersection[1]))),
+                        (int(round(intersection_val[0])), int(round(intersection_val[1]))),
                     ],
                     fill=stroke_color,
                     width=stroke_width,
                 )
         
-        for ray in rays:
+        for ray in rays_val:
             draw.line(
                 [
                     (int(round(ray.start[0])), int(round(ray.start[1]))),
@@ -267,6 +280,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--aspect", type=float, default=None)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--prompt", type=str, default=None)
+    parser.add_argument("--video", action="store_true", help="Generate video solution")
     return parser.parse_args(argv)
 
 
@@ -278,6 +292,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         aspect=args.aspect,
         seed=args.seed,
         prompt=args.prompt,
+        record_video=args.video,
     )
     records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
     generator.write_metadata(records, Path(args.output_dir) / "data.json")

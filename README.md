@@ -79,9 +79,11 @@ The evaluator reports the option inferred from:
 
 Most leaderboard scores quoted in the paper use majority voting over frames (“Major Frame”), last-frame inspection, or the audio transcript.
 
-Batch utilities in `scripts/gen_point.sh` and `scripts/multiple_choice_summary.py` automate multi-sample generation and summary for all point/line/shape tasks.
+`scripts/gen_point.sh` can generate training data for eyeballing puzzles. The "VIDEO" argument can be set to true to also generate ground truth videos.
 
 `scripts/run_point.sh` calls `scripts/generate_and_vote.py` that generates new puzzles for multiple puzzle types and then evaluate them.
+
+`scripts/multiple_choice_summary.py` outputs summary for all eyeballing puzzles.
 
 ## ARC-AGI-2 abstractions
 
@@ -94,7 +96,7 @@ python -m puzzle.arcagi.evaluator data/arcagi/data.json <PUZZLE_ID> attempts/arc
 
 Key helpers:
 
-- `scripts/generate_all_arc_puzzles.py`: bulk generation across the curated task list used in VideoThinkBench.
+- `scripts/generate_all_arc_puzzles.py`: bulk generation using all jsons in ARC-AGI-2 dataset. use --video to generate video solutions besides image solutions. use --split *an integer* to generate more than ARC-AGI-2 dataset amount by combination over training instances.
 - `scripts/arcagi_range_vote.py`: aggregates self-consistency runs (supports GPT-5, Claude 4.5, Gemini 2.5 Pro, and Sora-2 outputs). The paper’s ablations rely on these ranges.
 
 Evaluation converts colored cells back to ARC palette indices and prints JSON with per-cell agreement, enabling downstream voting or qualitative review.
@@ -114,6 +116,7 @@ python -m puzzle.maze.evaluator data/maze/data.json <PUZZLE_ID> attempts/maze/fi
 
 Mazes highlight the start cell and the goal in red. The evaluator verifies that a continuous red stroke connects them without bleeding into walls. `scripts/maze_summary.py` collects aggregate accuracy from batches of attempts.
 
+Generators can use --video to generate video solutions, and --use-gpt-5 to print cell ids on the image, for VLMs to answer.
 
 ## Legacy generators not in the paper
 

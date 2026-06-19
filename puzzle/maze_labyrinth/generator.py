@@ -8,9 +8,9 @@ from collections import deque
 from pathlib import Path
 from typing import Deque, Dict, List, Optional, Sequence, Set, Tuple
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
-from ..maze_base import MazePuzzleGenerator, MazePuzzleRecord
+from ..maze_base import MazePuzzleGenerator, MazePuzzleRecord, draw_path_line
 
 # Colors used for rendering.
 PATH_COLOR = (240, 240, 240)
@@ -19,6 +19,7 @@ START_COLOR = (220, 30, 30)
 GOAL_COLOR = START_COLOR # (40, 180, 80)
 LINE_COLOR = (220, 0, 0)
 BACKGROUND_COLOR = (16, 16, 16)
+TEXT_COLOR = (0, 0, 255)
 
 Cell = Tuple[int, int]
 
@@ -45,32 +46,65 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         prompt: Optional[str] = None,
         canvas_width: Optional[int] = None,
         aspect: Optional[float] = None,
+        show_cell_id: bool = False,
+        video: bool = False,
     ) -> None:
         if rings < 2:
             raise ValueError("rings must be at least 2 to form an interesting maze")
         if segments < 6:
             raise ValueError("segments must be at least 6 for smooth angular resolution")
 
-        resolved_ring_width = int(ring_width if ring_width is not None else (size if size is not None else self.DEFAULT_RING_WIDTH))
-        if resolved_ring_width <= 6:
-            raise ValueError("ring_width must be greater than 6 pixels")
-
-        resolved_wall = int(wall_thickness if wall_thickness is not None else max(6, resolved_ring_width // 4))
-        if resolved_wall <= 0:
-            raise ValueError("wall_thickness must be positive")
-
         self.rings = int(rings)
         self.total_rings = self.rings + 1  # Include central cell as ring 0.
         self.segments = int(segments)
-        self.ring_width = resolved_ring_width
-        self.wall_thickness = resolved_wall
-        self.ring_spacing = self.ring_width + self.wall_thickness
-        self.inner_offset = max(24, self.wall_thickness * 2)
-        self.outer_margin = self.inner_offset
 
-        max_radius = (self.total_rings - 1) * self.ring_spacing + self.ring_width
-        canvas_radius = max_radius + self.inner_offset + self.outer_margin
-        canvas_size = int(math.ceil(canvas_radius * 2))
+        target_rw = int(ring_width if ring_width is not None else (size if size is not None else self.DEFAULT_RING_WIDTH))
+        is_user_set = (ring_width is not None) or (size is not None)
+
+        def _get_layout_params(rw: int) -> Tuple[int, int, int]:
+            wt = int(wall_thickness if wall_thickness is not None else max(6, rw // 4))
+            io = max(12, wt * 2, rw // 2)
+            # max_radius calculation: (rings-1)*spacing + ring_width
+            # spacing = rw + wt
+            mr = (self.total_rings - 1) * (rw + wt) + rw
+            # Canvas size covers diameter + 2*inner_offset (no outer margin)
+            sz = int(math.ceil((mr + io) * 2))
+            return wt, io, sz
+
+        def _check_fits(rw: int) -> bool:
+            if canvas_width is None:
+                return True
+            _, _, sz = _get_layout_params(rw)
+            w = int(canvas_width)
+            
+            if aspect is None:
+                return w >= sz
+                
+            asp = float(aspect)
+            if asp >= 1.0:
+                mw = int(math.ceil(sz * asp))
+            else:
+                mw = sz
+            return w >= mw - 1
+
+        if not is_user_set and canvas_width is not None and not _check_fits(target_rw):
+             for rw in range(target_rw - 1, 6, -1):
+                 if _check_fits(rw):
+                     target_rw = rw
+                     break
+
+        if target_rw <= 6:
+            raise ValueError("ring_width (or resulting auto-sized width) must be greater than 6 pixels")
+
+        self.ring_width = target_rw
+        self.wall_thickness, self.inner_offset, canvas_size = _get_layout_params(self.ring_width)
+
+        if self.wall_thickness <= 0:
+            raise ValueError("wall_thickness must be positive")
+        self.ring_spacing = self.ring_width + self.wall_thickness
+        
+        self.max_radius = (self.total_rings - 1) * self.ring_spacing + self.ring_width
+        self.canvas_radius = self.max_radius + self.inner_offset
 
         final_width, final_height = self._resolve_canvas_dimensions(canvas_size, canvas_width, aspect)
         final_aspect = final_width / final_height
@@ -83,12 +117,12 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
             size=self.ring_width,
             seed=seed,
             prompt=prompt,
+            show_cell_id=show_cell_id,
+            video=video,
         )
 
         self.canvas_size = self.canvas_width
         self.center = (self.canvas_width / 2.0, self.canvas_height / 2.0)
-        self.max_radius = max_radius
-        self.canvas_radius = canvas_radius
         self.cells_per_ring: List[int] = [1] + [self.segments for _ in range(self.rings)]
 
     # ------------------------------------------------------------------
@@ -123,16 +157,21 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
 
         if canvas_width is not None:
             width = int(canvas_width)
-            if width < min_width:
+            # FIXED: Added tolerance for floating point rounding errors (e.g. 640 vs 641)
+            # and allow the user to proceed if they are very close.
+            if width < min_width - 1:
                 raise ValueError(
-                    "canvas_width is too small to satisfy the requested aspect ratio without clipping the labyrinth"
+                    f"canvas_width ({width}) is too small to satisfy the requested aspect ratio "
+                    f"({aspect_value}) without clipping the labyrinth (needs ~{min_width})"
                 )
         else:
             width = min_width
 
         width = max(width, min_size)
         height = int(math.ceil(width / aspect_value))
-        if height < min_size:
+        
+        # FIXED: Allow slight tolerance for height checks too.
+        if height < min_size - 1:
             raise ValueError("Resolved canvas height is too small for the labyrinth geometry")
         return width, height
 
@@ -153,8 +192,13 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         solution_image = self._render_maze(passages, start_cell, goal_cell, path=path_cells)
         puzzle_path, solution_path = self.save_images(puzzle_uuid, puzzle_image, solution_image)
 
-        start_point = self._cell_center(start_cell)
-        goal_point = self._cell_center(goal_cell)
+        if self.video:
+            path_points = [self._cell_center_from_cell(cell) for cell in path_cells]
+            thickness = max(3, self.ring_width // 4)
+            self.save_video(puzzle_uuid, puzzle_image, path_points, thickness=thickness)
+
+        start_point = self._cell_center_from_cell(start_cell)
+        goal_point = self._cell_center_from_cell(goal_cell)
 
         record = self.build_record(
             puzzle_uuid,
@@ -172,9 +216,18 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
                 "cells_per_ring": self.cells_per_ring,
                 "start_cell": list(start_cell),
                 "goal_cell": list(goal_cell),
+                "solution_path_cell_ids": [self._get_cell_id(cell) for cell in path_cells],
             },
         )
         return record
+
+    def _get_cell_id(self, cell: Cell) -> int:
+        ring, segment = cell
+        if ring == 0:
+            return 0
+        # Ring 0 has 1 cell.
+        # Rings 1..(ring-1) have self.segments cells each.
+        return 1 + (ring - 1) * self.segments + segment
 
     # ------------------------------------------------------------------
     # Graph construction and traversal
@@ -282,10 +335,15 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         draw = ImageDraw.Draw(canvas)
 
         self._fill_walkways(draw)
+
         self._draw_walls(draw, passages)
         self._draw_markers(draw, start_cell, goal_cell)
         if path:
-            self._draw_solution(draw, path)
+            self._draw_solution(canvas, path)
+        
+        if self.show_cell_id:
+            self._draw_cell_ids(draw)
+            
         return canvas
 
     def _fill_walkways(self, draw: ImageDraw.ImageDraw) -> None:
@@ -363,8 +421,8 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         draw.line([start, end], fill=PATH_COLOR, width=int(self.wall_thickness * 1.5))
 
     def _draw_markers(self, draw: ImageDraw.ImageDraw, start_cell: Cell, goal_cell: Cell) -> None:
-        start_point = self._cell_center(start_cell)
-        goal_point = self._cell_center(goal_cell)
+        start_point = self._cell_center_from_cell(start_cell)
+        goal_point = self._cell_center_from_cell(goal_cell)
         radius = max(6, self.ring_width // 3)
         self._draw_marker(draw, start_point, START_COLOR, radius)
         self._draw_marker(draw, goal_point, GOAL_COLOR, radius)
@@ -380,12 +438,31 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         bbox = (x - radius, y - radius, x + radius, y + radius)
         draw.ellipse(bbox, fill=color)
 
-    def _draw_solution(self, draw: ImageDraw.ImageDraw, path: Sequence[Cell]) -> None:
+    def _draw_solution(self, image: Image.Image, path: Sequence[Cell]) -> None:
         if len(path) < 2:
             return
         thickness = max(3, self.ring_width // 4)
-        points = [self._cell_center(cell) for cell in path]
-        draw.line(points, fill=LINE_COLOR, width=thickness, joint="curve")
+        points = [self._cell_center_from_cell(cell) for cell in path]
+        draw_path_line(image, points, LINE_COLOR, thickness)
+
+    def _draw_cell_ids(self, draw: ImageDraw.ImageDraw) -> None:
+        font_size = max(8, int(self.ring_width * 0.4))
+        try:
+            font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+        except OSError:
+            try:
+                font = ImageFont.truetype("arial.ttf", font_size)
+            except OSError:
+                font = ImageFont.load_default()
+
+        # Iterate all cells
+        for ring in range(self.total_rings):
+            count = self.cells_per_ring[ring]
+            for segment in range(count):
+                cell = (ring, segment)
+                text = str(self._get_cell_id(cell))
+                cx, cy = self._cell_center_from_cell(cell)
+                draw.text((cx, cy), text, fill=TEXT_COLOR, anchor="mm", font=font)
 
     # ------------------------------------------------------------------
     # Geometry utilities
@@ -429,8 +506,20 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         y = cy - radius * math.sin(angle_rad)
         return (x, y)
 
-    def _cell_center(self, cell: Cell) -> Tuple[float, float]:
+    def _cell_center(self, cell_id: int) -> Tuple[float, float]:
+        if cell_id == 0:
+            cell = (0, 0)
+        else:
+            adjusted = cell_id - 1
+            ring = adjusted // self.segments + 1
+            segment = adjusted % self.segments
+            cell = (ring, segment)
+        return self._cell_center_from_cell(cell)
+
+    def _cell_center_from_cell(self, cell: Cell) -> Tuple[float, float]:
         ring, idx = cell
+        if ring == 0:
+            return self.center
         inner, outer = self._ring_bounds(ring)
         radius = self._radius_to_pixel((inner + outer) * 0.5)
         start_deg, end_deg = self._segment_angles_deg(ring, idx)
@@ -451,15 +540,21 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
         parser.add_argument("--wall-thickness", type=int, default=None, help="Thickness of black walls in pixels")
         parser.add_argument("--size", type=int, default=None, help="Alias for --ring-width to align with shared base interface")
         parser.add_argument("--canvas-width", type=int, default=None, help="Final canvas width in pixels")
-        parser.add_argument("--aspect", type=float, default=None, help="Desired width/height ratio for the final canvas")
+        parser.add_argument("--aspect", type=float, default=None, help="Desired width/height ratio")
         parser.add_argument("--seed", type=int, default=None)
         parser.add_argument("--prompt", type=str, default=None)
-        return parser.parse_args(argv)
+        parser.add_argument("--show-cell-id", action="store_true", help="Draw cell IDs on the maze")
+        parser.add_argument("--use-gpt-5", action="store_true", help="Same as --show-cell-id")
+        parser.add_argument("--video", action="store_true", help="Generate solution video")
+        namespace=parser.parse_args(argv)
+        if namespace.use_gpt_5:
+            namespace.show_cell_id = True
+        return namespace
 
     @classmethod
     def main(cls, argv: Optional[List[str]] = None) -> None:
         args = cls._parse_args(argv)
-        ring_width = args.ring_width if args.ring_width is not None else (args.size if args.size is not None else cls.DEFAULT_RING_WIDTH)
+        ring_width = args.ring_width if args.ring_width is not None else args.size
         prompt_arg = args.prompt if args.prompt is not None else cls.DEFAULT_PROMPT
         generator = cls(
             output_dir=args.output_dir,
@@ -471,6 +566,8 @@ class MazeLabyrinthGenerator(MazePuzzleGenerator):
             prompt=prompt_arg,
             canvas_width=args.canvas_width,
             aspect=args.aspect,
+            show_cell_id=args.show_cell_id,
+            video=args.video,
         )
         records = [generator.create_random_puzzle() for _ in range(max(1, args.count))]
         generator.write_metadata(records, generator.output_dir / "data.json")

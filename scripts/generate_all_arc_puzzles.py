@@ -4,12 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import math
 import sys
 from pathlib import Path
 from typing import Iterable, List, Optional
-from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -65,43 +65,6 @@ def _parse_ratio(value: Optional[str]) -> Optional[float]:
         )
 
 
-def _pad_image_to_aspect(image_path: Path, target_aspect: float, *, color=(255, 255, 255)) -> bool:
-    """Pad image on the right or bottom with a solid color to reach target aspect.
-
-    Returns True if padding was applied, False if already at target or image missing.
-    """
-    if not image_path.exists():
-        return False
-    with Image.open(image_path) as im:
-        w, h = im.size
-        if w == 0 or h == 0:
-            return False
-        current = w / h
-        # treat near-equality as equal to avoid tiny pads
-        if math.isclose(current, target_aspect, rel_tol=0.0, abs_tol=1e-4):
-            return False
-        if current < target_aspect:
-            # Need to increase width; pad on the right
-            new_w = int(math.ceil(target_aspect * h))
-            new_h = h
-            pad_right = new_w - w
-            if pad_right <= 0:
-                return False
-            canvas = Image.new("RGB", (new_w, new_h), color)
-            canvas.paste(im, (0, 0))
-        else:
-            # Need to increase height; pad on the bottom
-            new_w = w
-            new_h = int(math.ceil(w / target_aspect))
-            pad_bottom = new_h - h
-            if pad_bottom <= 0:
-                return False
-            canvas = Image.new("RGB", (new_w, new_h), color)
-            canvas.paste(im, (0, 0))
-        canvas.save(image_path)
-        return True
-
-
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -141,10 +104,27 @@ def _parse_args() -> argparse.Namespace:
         help="Optional aspect ratio for output images, e.g. 16:9 or 1.7778. Adds white padding on right/bottom to fit.",
     )
     parser.add_argument(
+        "--canvas-width",
+        type=int,
+        default=None,
+        help="Optional width to force resize the image to.",
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=None,
         help="Optional RNG seed (only used when sampling puzzles without explicit ids)",
+    )
+    parser.add_argument(
+        "--split",
+        type=int,
+        default=0,
+        help="Split training examples to create more puzzles",
+    )
+    parser.add_argument(
+        "--video",
+        action="store_true",
+        help="Generate video of the solution being drawn",
     )
     return parser.parse_args()
 
@@ -161,6 +141,8 @@ def main() -> None:
         cell_size=args.cell_size,
         prompt=args.prompt,
         seed=args.seed,
+        aspect=args.aspect_ratio,
+        canvas_width=args.canvas_width,
     )
 
     metadata_path = args.metadata or (generator.output_dir / "data.json")
@@ -175,24 +157,43 @@ def main() -> None:
         task_payload = json.loads(task_path.read_text(encoding="utf-8"))
         difficulty = _average_cells(task_payload)
         puzzle_id = task_path.stem
-        record = generator.create_puzzle(task_path=task_path, puzzle_id=puzzle_id)
-        record_dict = record.to_dict()
-        record_dict["difficulty"] = difficulty
-        # Optionally pad images to desired aspect ratio by extending canvas
-        if args.aspect_ratio:
-            puzzle_path = (generator.output_dir / record_dict["image"]).resolve()
-            solution_path = (generator.output_dir / record_dict["solution_image_path"]).resolve()
-            padded_puzzle = _pad_image_to_aspect(puzzle_path, args.aspect_ratio)
-            padded_solution = _pad_image_to_aspect(solution_path, args.aspect_ratio)
-            if padded_puzzle or padded_solution:
-                print(
-                    f"    padded to aspect {args.aspect_ratio:.6g}: "
-                    f"{padded_puzzle and 'puzzle ' or ''}{padded_solution and 'solution' or ''}"
-                )
-        records.append(record_dict)
-        print(f"[{index}/{len(task_paths)}] generated {puzzle_id} (difficulty={difficulty:.2f})")
 
-    records.sort(key=lambda item: (item["difficulty"], item["id"]))
+        tasks_to_generate = [(puzzle_id, None, None)]
+
+        if args.split > 0:
+            train_pairs = task_payload.get("train", [])
+            indices = range(len(train_pairs))
+            for s in range(1, args.split + 1):
+                # result train list must include at least 2 examples
+                if len(train_pairs) - s < 2:
+                    break
+                for removed_indices in itertools.combinations(indices, s):
+                    context_pairs = [
+                        train_pairs[i] for i in indices if i not in removed_indices
+                    ]
+                    for target_idx in removed_indices:
+                        target_pair = train_pairs[target_idx]
+                        removed_str = "-".join(map(str, removed_indices))
+                        sub_id = f"{puzzle_id}_s{s}_r{removed_str}_t{target_idx}"
+                        tasks_to_generate.append((sub_id, context_pairs, target_pair))
+
+        for pid, p_train, p_test in tasks_to_generate:
+            record = generator.create_puzzle(
+                task_path=task_path,
+                puzzle_id=pid,
+                train_pairs=p_train,
+                test_pair=p_test,
+                make_video=args.video,
+            )
+            record_dict = record.to_dict()
+            record_dict["difficulty"] = difficulty
+            records.append(record_dict)
+
+        print(
+            f"[{index}/{len(task_paths)}] generated {puzzle_id} (difficulty={difficulty:.2f}) + {len(tasks_to_generate)-1} splits"
+        )
+
+    # records.sort(key=lambda item: (item["difficulty"], item["id"]))
 
     metadata_path.write_text(json.dumps(records, indent=2), encoding="utf-8")
     print(f"Wrote {len(records)} puzzles to {metadata_path}")

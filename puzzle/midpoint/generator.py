@@ -77,16 +77,16 @@ class MidpointGenerator(PointTargetPuzzleGenerator):
         segment = self._build_segment(midpoint.to_list())
         point_radius = self.point_radius
         self.place_candidates(midpoint)
+        
+        # Store for _render usage (implicitly required by save_video_solution)
+        self._midpoint_coords = midpoint.to_list()
+        self._segment = segment
 
         pid = puzzle_id or str(uuid.uuid4())
         puzzle_img = self._render(
-            midpoint=midpoint.to_list(),
-            segment=segment,
             highlight_label=None,
         )
         solution_img = self._render(
-            midpoint=midpoint.to_list(),
-            segment=segment,
             highlight_label=self.correct_label,
         )
 
@@ -94,6 +94,15 @@ class MidpointGenerator(PointTargetPuzzleGenerator):
         solution_path = self.solution_dir / f"{pid}_solution.png"
         puzzle_img.save(puzzle_path)
         solution_img.save(solution_path)
+
+        if self.record_video:
+            try:
+                self.save_video_solution(pid)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                print(f"Video error: {e}")
+
 
         return MidpointPuzzleRecord(
             id=pid,
@@ -155,23 +164,30 @@ class MidpointGenerator(PointTargetPuzzleGenerator):
     def _render(
         self,
         *,
-        midpoint: Tuple[float, float],
-        segment: Segment,
         highlight_label: Optional[str],
+        # Legacy/Testing optional args
+        midpoint: Optional[Tuple[float, float]] = None,
+        segment: Optional[Segment] = None,
     ) -> Image.Image:
         width, height = self.canvas_dimensions
-        base = Image.new("RGB", (width, height), (255, 255, 255))
-        draw = ImageDraw.Draw(base)
+        draw, base = self.get_draw_base()
+        
+        # Resolve args or state
+        midpoint_val = midpoint if midpoint is not None else getattr(self, "_midpoint_coords", None)
+        segment_val = segment if segment is not None else getattr(self, "_segment", None)
+        
+        if midpoint_val is None or segment_val is None:
+             raise RuntimeError("Render called without geometry state")
 
         anchor_color = (30, 30, 30)
         point_radius = self.point_radius
         anchor_radius = max(point_radius + 6, int(round(min(width, height) * 0.028)))
         draw.ellipse(
             [
-                int(round(segment.start[0] - anchor_radius)),
-                int(round(segment.start[1] - anchor_radius)),
-                int(round(segment.start[0] + anchor_radius)),
-                int(round(segment.start[1] + anchor_radius)),
+                int(round(segment_val.start[0] - anchor_radius)),
+                int(round(segment_val.start[1] - anchor_radius)),
+                int(round(segment_val.start[0] + anchor_radius)),
+                int(round(segment_val.start[1] + anchor_radius)),
             ],
             fill=(250, 250, 250),
             outline=anchor_color,
@@ -179,10 +195,10 @@ class MidpointGenerator(PointTargetPuzzleGenerator):
         )
         draw.ellipse(
             [
-                int(round(segment.end[0] - anchor_radius)),
-                int(round(segment.end[1] - anchor_radius)),
-                int(round(segment.end[0] + anchor_radius)),
-                int(round(segment.end[1] + anchor_radius)),
+                int(round(segment_val.end[0] - anchor_radius)),
+                int(round(segment_val.end[1] - anchor_radius)),
+                int(round(segment_val.end[0] + anchor_radius)),
+                int(round(segment_val.end[1] + anchor_radius)),
             ],
             fill=(250, 250, 250),
             outline=anchor_color,
@@ -192,8 +208,8 @@ class MidpointGenerator(PointTargetPuzzleGenerator):
         if highlight_label is not None: # Draw segment only on solution image
             draw.line(
                 [
-                    (int(round(segment.start[0])), int(round(segment.start[1]))),
-                    (int(round(segment.end[0])), int(round(segment.end[1]))),
+                    (int(round(segment_val.start[0])), int(round(segment_val.start[1]))),
+                    (int(round(segment_val.end[0])), int(round(segment_val.end[1]))),
                 ],
                 fill=(180, 180, 180),
                 width=max(2, int(round(min(width, height) * 0.01))),

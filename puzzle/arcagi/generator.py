@@ -8,9 +8,12 @@ import math
 import random
 import uuid
 from dataclasses import dataclass
+from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
+import cv2
+import numpy as np
 from PIL import Image, ImageDraw
 
 from ..base import AbstractPuzzleGenerator, PathLike
@@ -108,6 +111,8 @@ class ArcPuzzleRecord:
 class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
     """Generate ARC-AGI composite puzzles from task JSON files."""
 
+    MAX_VIDEO_FRAMES: int = 193
+
     def __init__(
         self,
         *,
@@ -118,6 +123,7 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
         seed: Optional[int] = None,
         shot: int = 0,
         aspect: Optional[float] = None,
+        canvas_width: Optional[int] = None,
     ) -> None:
         super().__init__(output_dir)
         self.dataset_dir = Path(dataset_dir)
@@ -130,6 +136,7 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
         if aspect is not None and aspect <= 0:
             raise ValueError("aspect must be positive")
         self.aspect = aspect
+        self.canvas_width = canvas_width
 
         self.puzzle_dir = self.output_dir / "puzzles"
         self.solution_dir = self.output_dir / "solutions"
@@ -148,18 +155,25 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
         *,
         task_path: Optional[PathLike] = None,
         puzzle_id: Optional[str] = None,
+        train_pairs: Optional[List[Dict[str, List[List[int]]]]] = None,
+        test_pair: Optional[Dict[str, List[List[int]]]] = None,
+        make_video: bool = False,
     ) -> ArcPuzzleRecord:
         task_file = self._resolve_task_path(task_path)
-        task_data = json.loads(task_file.read_text(encoding="utf-8"))
-        train_pairs = task_data.get("train") or []
-        if self.shot > 0:
-            train_pairs = train_pairs[:self.shot]
-        test_pairs = task_data.get("test") or []
-        if not test_pairs:
-            raise ValueError(f"Task {task_file} does not include any test pairs")
+        if train_pairs is None or test_pair is None:
+            task_data = json.loads(task_file.read_text(encoding="utf-8"))
+            if train_pairs is None:
+                train_pairs = task_data.get("train") or []
+                if self.shot > 0:
+                    train_pairs = train_pairs[:self.shot]
+            if test_pair is None:
+                test_pairs = task_data.get("test") or []
+                if not test_pairs:
+                    raise ValueError(f"Task {task_file} does not include any test pairs")
+                test_pair = test_pairs[0]
 
-        test_pair = test_pairs[0]
         layout, placements = self._build_layout(train_pairs, test_pair)
+
 
         record_id = puzzle_id or f"{task_file.stem}-{uuid.uuid4().hex[:8]}"
         puzzle_image = self._render_layout(layout, include_test_solution=False)
@@ -175,6 +189,15 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
                 solution_image = self._paste_onto_canvas(solution_image, target_width, target_height, offset_x, offset_y)
                 placements = self._offset_placements(placements, offset_x, offset_y)
 
+        if self.canvas_width is not None and puzzle_image.width != self.canvas_width:
+            w, h = puzzle_image.size
+            scale = self.canvas_width / w
+            new_w = self.canvas_width
+            new_h = int(h * scale)
+            puzzle_image = puzzle_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            solution_image = solution_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            placements = self._scale_placements(placements, scale)
+
         puzzle_path = self.puzzle_dir / f"{record_id}_puzzle.png"
         solution_path = self.solution_dir / f"{record_id}_solution.png"
         puzzle_image.save(puzzle_path)
@@ -184,6 +207,10 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
         test_output_grid: List[List[int]] = test_pair["output"]
         test_rows = len(test_output_grid)
         test_cols = len(test_output_grid[0]) if test_rows else 0
+
+        if make_video:
+            video_path = self.solution_dir / f"{record_id}_solution.mp4"
+            self._generate_video(puzzle_image, placements, test_output_grid, video_path)
 
         return ArcPuzzleRecord(
             id=record_id,
@@ -448,6 +475,29 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
             )
         return adjusted
 
+    def _scale_placements(
+        self,
+        placements: Sequence[GridPlacement],
+        scale: float,
+    ) -> List[GridPlacement]:
+        adjusted: List[GridPlacement] = []
+        for placement in placements:
+            x0, y0, x1, y1 = placement.bbox
+            adjusted.append(
+                GridPlacement(
+                    kind=placement.kind,
+                    bbox=(
+                        int(x0 * scale),
+                        int(y0 * scale),
+                        int(x1 * scale),
+                        int(y1 * scale),
+                    ),
+                    rows=placement.rows,
+                    cols=placement.cols,
+                )
+            )
+        return adjusted
+
     def generate_dataset(
         self,
         count: int,
@@ -461,6 +511,103 @@ class ArcPuzzleGenerator(AbstractPuzzleGenerator[ArcPuzzleRecord]):
         if metadata_path is not None:
             self.write_metadata(records, metadata_path, append=append)
         return records
+
+    def _generate_video(
+        self,
+        base_image: Image.Image,
+        placements: List[GridPlacement],
+        test_output_grid: List[List[int]],
+        video_path: Path,
+    ) -> None:
+        target_placement = next((p for p in placements if p.kind == "test_output"), None)
+        if not target_placement:
+            return
+
+        x0, y0, x1, y1 = target_placement.bbox
+        x_start, y_start = x0, y0
+        
+        rows = len(test_output_grid)
+        cols = len(test_output_grid[0]) if rows else 0
+
+        flat_grid = [c for row in test_output_grid for c in row]
+        if not flat_grid:
+            return
+        counter = Counter(flat_grid)
+        most_common_color_idx, count = counter.most_common(1)[0]
+        has_dominant = (count / len(flat_grid)) > 0.7
+
+        frame_rgb = np.array(base_image)
+        frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+
+        height, width, _ = frame_bgr.shape
+        # Prefer vp09 (WebM)
+        fourcc = cv2.VideoWriter_fourcc(*'vp09')
+        
+        video = cv2.VideoWriter(str(video_path), fourcc, 10, (width, height))
+        if not video.isOpened():
+             # If avc1 failed, try vp09 with .webm
+             new_path = video_path.with_suffix('.webm')
+             fourcc = cv2.VideoWriter_fourcc(*'vp09')
+             video = cv2.VideoWriter(str(new_path), fourcc, 10, (width, height))
+             if not video.isOpened():
+                  print(f"Warning: Could not open video writer for {video_path} or {new_path}")
+                  return
+
+        for _ in range(5):
+            video.write(frame_bgr)
+
+        current_frame = frame_bgr.copy()
+        cells_to_paint = []
+
+        if has_dominant:
+            dom_rgb = ARC_PALETTE.get(most_common_color_idx, (0,0,0))
+            dom_bgr = (dom_rgb[2], dom_rgb[1], dom_rgb[0])
+            for r in range(rows):
+                for c in range(cols):
+                    self._paint_cell_in_cv2(current_frame, x_start, y_start, r, c, dom_bgr)
+            for _ in range(5):
+                video.write(current_frame)
+            for r in range(rows):
+                for c in range(cols):
+                    if test_output_grid[r][c] != most_common_color_idx:
+                        cells_to_paint.append((r, c, test_output_grid[r][c]))
+        else:
+             for r in range(rows):
+                for c in range(cols):
+                    cells_to_paint.append((r, c, test_output_grid[r][c]))
+
+        start_hold = 5
+        dominant_hold = 5 if has_dominant else 0
+        end_hold = 20
+        total_static_frames = start_hold + dominant_hold + end_hold
+        
+        painting_steps = len(cells_to_paint)
+        max_painting_frames = self.MAX_VIDEO_FRAMES - total_static_frames
+        
+        batch_size = 1
+        if painting_steps > max_painting_frames:
+             batch_size = math.ceil(painting_steps / max(1, max_painting_frames))
+
+        for i in range(0, len(cells_to_paint), batch_size):
+            batch = cells_to_paint[i : i + batch_size]
+            for r, c, val in batch:
+                color_rgb = ARC_PALETTE.get(val, (0,0,0))
+                color_bgr = (color_rgb[2], color_rgb[1], color_rgb[0])
+                self._paint_cell_in_cv2(current_frame, x_start, y_start, r, c, color_bgr)
+            video.write(current_frame)
+
+        for _ in range(20):
+            video.write(current_frame)
+
+        video.release()
+
+    def _paint_cell_in_cv2(self, img: np.ndarray, x0_base: int, y0_base: int, r: int, c: int, color_bgr: Tuple[int, int, int]) -> None:
+        size = self.cell_size
+        abs_x = x0_base + c * size
+        abs_y = y0_base + r * size
+        p1 = (abs_x + 1, abs_y + 1)
+        p2 = (abs_x + size - 1, abs_y + size - 1)
+        cv2.rectangle(img, p1, p2, color_bgr, -1)
 
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
