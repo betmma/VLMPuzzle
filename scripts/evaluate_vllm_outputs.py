@@ -168,6 +168,7 @@ def copy_candidate_if_present(candidate_path: Path, attempt_dir: Path) -> Option
     if not candidate_path.exists() or not candidate_path.is_file():
         return None
     destination = attempt_dir / "result.png"
+    destination.parent.mkdir(parents=True, exist_ok=True)
     if candidate_path.resolve() != destination.resolve():
         shutil.copy2(candidate_path, destination)
     return destination
